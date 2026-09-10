@@ -1,0 +1,18 @@
+# Môi trường Python cục bộ
+.venv/
+__pycache__/
+*.pyc
+
+# Dữ liệu sinh ra khi chạy ứng dụng
+backend/storage/drawings/*
+backend/storage/snapshots/*
+
+# Giữ lại chính các thư mục lưu trữ rỗng
+!backend/storage/drawings/.gitkeep
+!backend/storage/snapshots/.gitkeep
+
+# Tệp riêng của hệ điều hành và trình soạn thảo
+.DS_Store
+.vscode/
+.idea/
+

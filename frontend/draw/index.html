@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud of Strokes — Draw</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+  </head>
+
+  <body>
+    <header class="intro">
+      <p class="eyebrow">Bước 1 / 2</p>
+      <h1>Để lại nét vẽ của bạn</h1>
+      <p class="intro-text">Vẽ một điều bạn muốn gửi vào không gian chung.</p>
+    </header>
+
+    <main class="workspace">
+      <section class="panel" aria-labelledby="drawing-heading">
+        <h2 class="panel-title" id="drawing-heading">Vùng vẽ</h2>
+
+        <canvas
+          class="drawing-canvas"
+          id="drawing-canvas"
+          width="360"
+          height="480"
+          aria-label="Vùng vẽ của khách tham quan"
+        >
+          Trình duyệt của bạn không hỗ trợ vùng vẽ Canvas.
+        </canvas>
+      </section>
+
+      <section class="panel" aria-labelledby="color-heading">
+        <h2 class="panel-title" id="color-heading">Màu nét vẽ</h2>
+
+        <div class="color-list">
+          <button
+            class="tool-button color-button is-selected"
+            type="button"
+            data-color="#ffc76a"
+            data-color-name="Vàng ấm"
+            aria-pressed="true"
+          >
+            <span class="color-swatch color-swatch--gold" aria-hidden="true"></span>
+            Vàng ấm
+          </button>
+          <button
+            class="tool-button color-button"
+            type="button"
+            data-color="#ffffff"
+            data-color-name="Trắng"
+            aria-pressed="false"
+          >
+            <span class="color-swatch color-swatch--white" aria-hidden="true"></span>
+            Trắng
+          </button>
+          <button
+            class="tool-button color-button"
+            type="button"
+            data-color="#ff8a3d"
+            data-color-name="Cam"
+            aria-pressed="false"
+          >
+            <span class="color-swatch color-swatch--orange" aria-hidden="true"></span>
+            Cam
+          </button>
+        </div>
+
+        <p class="selection-status">
+          Màu đang chọn: <strong id="selected-color-name">Vàng ấm</strong>
+        </p>
+      </section>
+
+      <section class="panel" aria-labelledby="action-heading">
+        <h2 class="panel-title" id="action-heading">Hành động</h2>
+
+        <div class="action-list">
+          <button class="tool-button" type="button" disabled>Hoàn tác</button>
+          <button class="tool-button" type="button" disabled>Xóa hết</button>
+          <button class="tool-button primary-button" type="button" disabled>
+            Gửi nét vẽ
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <p>Chọn màu, sau đó kéo chuột hoặc ngón tay trên vùng vẽ.</p>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f5efdf"><title>Điều khiển - THỜI KHẮC</title>
+  <link rel="icon" type="image/png" href="/shared/assets/exhibition-logo.png">
+  <link rel="stylesheet" href="../display/led.css?v=20260929-final1"><link rel="stylesheet" href="style.css?v=20260930-page-preview"><script type="module" src="app.js?v=20260930-page-preview"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><img class="brand-mark" src="/shared/assets/exhibition-logo.png" alt="Logo triển lãm"> THỜI KHẮC <small>KHÔNG GIAN TRIỂN LÃM</small></a>
+  <nav aria-label="Điều hướng"><a href="/draw/" target="_blank" rel="noopener">Bảng vẽ ↗</a><a href="/display/" target="_blank" rel="noopener">Màn chiếu ↗</a><button id="login-button">Đăng nhập</button></nav>
+</header>
+<div class="page-heading"><div><p class="eyebrow">ĐIỀU PHỐI KHÔNG GIAN</p><h1>Bàn điều khiển</h1></div><p id="connection-status" role="status">Đang kết nối…</p></div>
+<div id="notice" role="status" class="notice" hidden></div>
+
+<main class="dashboard">
+  <aside class="library-panel panel">
+    <div class="panel-title"><h2>Kho nét vẽ</h2><span id="library-count">0</span></div>
+    <div class="segmented" aria-label="Thư mục nét vẽ"><button id="show-active" class="active" aria-pressed="true">Tất cả</button><button id="show-favorites" aria-pressed="false">♥ Yêu thích</button><button id="show-trash" aria-pressed="false">Thùng rác</button></div>
+    <label class="search-label"><span class="sr-only">Tìm nét vẽ</span><input id="library-search" type="search" placeholder="Tìm mã hình…"></label>
+    <label class="check-label"><input id="only-visible" type="checkbox"> Chỉ hình đang hiện</label>
+    <p id="library-target" class="library-target">Thêm nét vẽ vào ô 01</p>
+    <div id="library" class="library"></div>
+  </aside>
+
+  <div class="workspace">
+    <section class="stage-panel panel">
+      <div class="stage-toolbar">
+        <strong id="stage-title">Trình chiếu trực tiếp</strong>
+        <div class="toolbar-actions"><button id="pause-button" data-admin>Tạm dừng</button><button id="refresh-button" title="Lấy dữ liệu mới nhất" aria-label="Làm mới">↻</button><button id="snapshot-button" class="primary" data-admin>Lưu khoảnh khắc</button></div>
+      </div>
+      <div id="live-display"><div id="stage" aria-label="Chọn ô trên màn trình chiếu"></div></div>
+      <div class="stage-bottom"><span id="stage-count">Đang tải…</span><span>Chạm vào ô để chọn</span></div>
+    </section>
+
+    <section id="led-management" class="panel" hidden>
+      <div class="panel-title"><h2>Ô trình chiếu</h2><span id="led-cell-count"></span></div>
+      <div class="cell-selector"><label><span>Ô đang chọn</span><select id="led-cell-select"></select></label><p>Chọn một ô, sau đó bấm hình trong Kho nét vẽ để đưa vào đúng ô đó.</p></div>
+      <div id="led-queue" class="saved-list"></div>
+    </section>
+
+    <section class="panel pages-panel">
+      <div class="panel-title"><h2>Trang trình chiếu</h2></div>
+      <div class="page-actions"><div class="page-picker"><label><span class="sr-only">Trang đang chọn</span><select id="page-select" data-admin></select></label><button id="rename-page" class="icon-button" data-admin title="Đổi tên trang" aria-label="Đổi tên trang"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Zm10.2-13 3 3M4 20h6"/></svg></button><button id="delete-page" class="icon-button danger" data-admin title="Xóa trang" aria-label="Xóa trang"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg></button></div><button id="show-page" class="primary" data-admin>Chiếu trang</button><button id="new-page" data-admin>＋ Tạo trang</button></div>
+      <form id="rotation-form" class="inline-setting"><label for="rotation-seconds">Luân phiên hình mỗi (giây)<input id="rotation-seconds" type="number" min="2" max="120" step="1" required data-admin aria-describedby="rotation-help"></label><button type="submit" data-admin>Áp dụng</button><p id="rotation-help">2–120 giây · mỗi ô đếm riêng từ lúc hình xuất hiện.</p></form>
+    </section>
+
+    <details class="panel snapshots-drawer" open>
+      <summary>Khoảnh khắc <span id="snapshot-count">0 ảnh</span></summary>
+      <div id="snapshots" class="snapshots"></div>
+    </details>
+  </div>
+</main>
+
+<dialog id="login-dialog"><form id="login-form"><h2>Mở bàn điều khiển</h2><label>Mã quản lý<input id="admin-pin" type="password" autocomplete="current-password" required></label><p id="login-error" role="alert"></p><div class="pair"><button type="button" id="cancel-login">Xem trước</button><button class="primary">Đăng nhập</button></div></form></dialog>
+<dialog id="rename-page-dialog"><form id="rename-page-form"><h2>Đổi tên trang</h2><label for="page-name">Tên trang<input id="page-name" maxlength="80" required data-admin></label><div class="pair"><button type="button" id="cancel-rename">Hủy</button><button class="primary" data-admin>Lưu tên</button></div></form></dialog>
+</body></html>

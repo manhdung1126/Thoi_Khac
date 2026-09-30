@@ -1,83 +1,105 @@
-const colorButtons = document.querySelectorAll(".color-button");
-const selectedColorName = document.querySelector("#selected-color-name");
-const canvas = document.querySelector("#drawing-canvas");
-const context = canvas.getContext("2d");
+import {paintStroke, samplePoint} from './pencil.js';
+import {LED, MONO_LED_WIDTHS, monoDrawWidth} from '../shared/led.js';
 
-let selectedColor = "#ffc76a";
-let isDrawing = false;
-
-context.lineWidth = 6;
-context.lineCap = "butt";
-context.lineJoin = "miter";
-
-function selectColor(event) {
-  const clickedButton = event.currentTarget;
-
-  selectedColor = clickedButton.dataset.color;
-  selectedColorName.textContent = clickedButton.dataset.colorName;
-
-  colorButtons.forEach((button) => {
-    const isSelected = button === clickedButton;
-
-    button.classList.toggle("is-selected", isSelected);
-    button.setAttribute("aria-pressed", String(isSelected));
-  });
-
-  console.log("Màu hiện tại:", selectedColor);
+const $=selector=>document.querySelector(selector);
+const canvas=$('#drawing-canvas'),logicalSize=LED.sourceSize;
+const pixelRatio=Math.max(1,Number(window.devicePixelRatio)||1);
+function retinaContext(target,width,height){
+  target.width=Math.round(width*pixelRatio);target.height=Math.round(height*pixelRatio);
+  const ctx=target.getContext('2d');ctx.setTransform?.(pixelRatio,0,0,pixelRatio,0,0);return ctx;
 }
+const context=retinaContext(canvas,logicalSize,logicalSize);
+const activeBase=document.createElement('canvas');activeBase.width=canvas.width;activeBase.height=canvas.height;
+const activeBaseContext=activeBase.getContext('2d');
+const apiBase=location.port==='4173'?`${location.protocol}//${location.hostname}:8000`:location.origin;
+const draftKey='cloud-strokes-draft-v2',preferencesKey='cloud-strokes-brush-v1';
+let strokes=[],undo=[],redo=[],active=null,busy=false,erasing=false,monoLevel=3;
+let width=monoDrawWidth(monoLevel),submissionId=uuid(),hasDrawing=false;
+let healthTimer,checking=false,statusTimer,networkDown=false;
 
-colorButtons.forEach((button) => {
-  button.addEventListener("click", selectColor);
+function uuid(){const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+function savePreferences(){try{localStorage.setItem(preferencesKey,JSON.stringify({monoLevel}));}catch{}}
+function previewBrush(){
+  const sample=$('#brush-preview'),ctx=retinaContext(sample,280,48);ctx.clearRect(0,0,280,48);
+  const stroke={width,erase:false,points:[]};
+  for(let i=0;i<=100;i++)stroke.points.push({x:22+i*2.35,y:23+Math.sin(i*.075)*6});
+  paintStroke(ctx,stroke);
+}
+function status(text,type='',timeout=type==='error'?0:2600){
+  const node=$('#upload-status');clearTimeout(statusTimer);node.textContent=text;node.title='';node.className=`toast ${type}`;node.hidden=!text;
+  if(text&&timeout)statusTimer=setTimeout(()=>{node.hidden=true;},timeout);
+}
+function toolPanel(open){const panel=$('#tool-panel'),button=$('#pencil-button');panel.hidden=!open;button.setAttribute('aria-expanded',String(open));}
+function updateButtons(){
+  $('#send-button').disabled=busy||Boolean(active)||!hasDrawing;
+  $('#undo-button').disabled=busy||Boolean(active)||!undo.length;
+  $('#redo-button').disabled=busy||Boolean(active)||!redo.length;
+  for(const node of document.querySelectorAll('#eraser-button,#pencil-button,[data-mono-width]'))node.disabled=busy||Boolean(active);
+  $('#send-button').textContent=busy?'Đang khắc…':'Khắc';document.body.classList?.toggle('is-submitting',busy);
+  canvas.setAttribute('aria-busy',String(busy));$('#paper-hint').hidden=hasDrawing||Boolean(active);
+}
+function point(event){return samplePoint(event,canvas.getBoundingClientRect());}
+function render(){context.clearRect(0,0,logicalSize,logicalSize);for(const stroke of strokes)paintStroke(context,stroke);}
+function rememberBase(){activeBaseContext.setTransform?.(1,0,0,1,0,0);activeBaseContext.clearRect(0,0,activeBase.width,activeBase.height);activeBaseContext.drawImage(canvas,0,0);}
+function renderActive(){
+  if(!active)return;context.save();context.setTransform?.(1,0,0,1,0,0);context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(activeBase,0,0);context.restore();paintStroke(context,active.stroke);active.frame=0;
+}
+function scheduleActive(){if(active&&!active.frame)active.frame=requestAnimationFrame(renderActive);}
+function remember(){undo.push(structuredClone(strokes));if(undo.length>20)undo.shift();redo=[];}
+function persist(){try{localStorage.setItem(draftKey,JSON.stringify({strokes,submissionId}));$('#draft-status').textContent='Đã giữ bản nháp trên thiết bị';}catch{$('#draft-status').textContent='Không đủ chỗ lưu bản nháp';}}
+function changed(){submissionId=uuid();hasDrawing=context.getImageData(0,0,canvas.width,canvas.height).data.some((v,i)=>i%4===3&&v>0);persist();updateButtons();}
+
+canvas.addEventListener('pointerdown',event=>{
+  if(active||busy||event.isPrimary===false||(event.pointerType==='mouse'&&event.button!==0))return;
+  event.preventDefault();remember();rememberBase();
+  const stroke={color:LED.color,width:erasing?Math.max(18,width*3):width,ledWidth:MONO_LED_WIDTHS[monoLevel-1],erase:erasing,led:true,points:[point(event)]};
+  strokes.push(stroke);active={id:event.pointerId,stroke,frame:0};renderActive();canvas.setPointerCapture(event.pointerId);updateButtons();
 });
-
-function getCanvasPoint(event) {
-  const rectangle = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rectangle.width;
-  const scaleY = canvas.height / rectangle.height;
-
-  return {
-    x: (event.clientX - rectangle.left) * scaleX,
-    y: (event.clientY - rectangle.top) * scaleY,
-  };
+function appendEvents(event){
+  const coalesced=event.getCoalescedEvents?.()||[],samples=coalesced.length?[...coalesced,event]:[event];
+  for(const sample of samples){if(!Number.isFinite(sample.clientX)||!Number.isFinite(sample.clientY))continue;const previous=active.stroke.points.at(-1),next=point(sample);if(Math.hypot(next.x-previous.x,next.y-previous.y)>=.35)active.stroke.points.push(next);}
 }
-
-function startDrawing(event) {
-  isDrawing = true;
-
-  const point = getCanvasPoint(event);
-
-  context.beginPath();
-  context.moveTo(point.x, point.y);
-  context.strokeStyle = selectedColor;
-
-  canvas.setPointerCapture(event.pointerId);
+canvas.addEventListener('pointermove',event=>{if(!active||active.id!==event.pointerId)return;event.preventDefault();appendEvents(event);scheduleActive();});
+function finish(event){
+  if(!active||active.id!==event.pointerId)return;event.preventDefault?.();if(event.type==='pointerup')appendEvents(event);
+  if(active.frame)cancelAnimationFrame(active.frame);renderActive();const pointerId=active.id;active=null;if(canvas.hasPointerCapture(pointerId))canvas.releasePointerCapture(pointerId);changed();if(!networkDown)status('');
 }
-
-function draw(event) {
-  if (!isDrawing) {
-    return;
-  }
-
-  const point = getCanvasPoint(event);
-
-  context.lineTo(point.x, point.y);
-  context.stroke();
+['pointerup','pointercancel','lostpointercapture'].forEach(type=>canvas.addEventListener(type,finish));
+$('#undo-button').addEventListener('click',()=>{redo.push(structuredClone(strokes));strokes=undo.pop();render();changed();if(!networkDown)status('');});
+$('#redo-button').addEventListener('click',()=>{undo.push(structuredClone(strokes));strokes=redo.pop();render();changed();if(!networkDown)status('');});
+function selectPen(){erasing=false;$('#pencil-button').setAttribute('aria-pressed','true');$('#eraser-button').setAttribute('aria-pressed','false');$('#tool-label').textContent=`Mono line · mức ${monoLevel}/5`;}
+$('#pencil-button').addEventListener('click',()=>{if(busy)return;selectPen();toolPanel($('#tool-panel').hidden);});
+$('#close-tool-panel').addEventListener('click',()=>{toolPanel(false);$('#pencil-button').focus?.();});
+function chooseMonoLevel(value){
+  monoLevel=Math.max(1,Math.min(5,Number(value)||3));width=monoDrawWidth(monoLevel);
+  document.querySelectorAll('[data-mono-width]').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.monoWidth)===monoLevel)));
+  const ledWidth=MONO_LED_WIDTHS[monoLevel-1];$('#mono-width-value').value=`Mức ${monoLevel} · ${ledWidth} px LED`;
+  $('#led-scale-help').textContent=`Mức ${monoLevel}: ≈${width.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2})} px trên bảng → ${ledWidth} px LED.`;
+  $('#brush-preview').setAttribute('aria-label',`Mẫu nét Mono line mức ${monoLevel}`);if(!erasing)selectPen();previewBrush();savePreferences();
 }
-
-function stopDrawing(event) {
-  if (!isDrawing) {
-    return;
-  }
-
-  isDrawing = false;
-  context.closePath();
-
-  if (canvas.hasPointerCapture(event.pointerId)) {
-    canvas.releasePointerCapture(event.pointerId);
-  }
+document.querySelectorAll('[data-mono-width]').forEach(button=>button.addEventListener('click',()=>chooseMonoLevel(button.dataset.monoWidth)));
+$('#eraser-button').addEventListener('click',()=>{if(busy)return;erasing=true;toolPanel(false);$('#pencil-button').setAttribute('aria-pressed','false');$('#eraser-button').setAttribute('aria-pressed','true');$('#tool-label').textContent='Tẩy nét vẽ';updateButtons();});
+document.addEventListener?.('keydown',event=>{if(event.key==='Escape')toolPanel(false);});
+async function request(path,options={},timeout=15000){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
+  try{const response=await fetch(apiBase+path,{...options,signal:controller.signal}),text=await response.text();let data;try{data=JSON.parse(text);}catch{data=null;}if(!response.ok)throw new Error(typeof data?.detail==='string'?data.detail:`Server chưa xử lý được (${response.status}). Hãy thử lại.`);if(!data)throw new Error('Phản hồi chưa hợp lệ. Hãy thử lại.');return data;}
+  catch(error){if(error.name==='AbortError'||error instanceof TypeError)throw new Error('Chưa xác nhận được kết quả. Kiểm tra kết nối rồi gửi lại; cùng lần gửi sẽ không tạo hình trùng.');throw error;}finally{clearTimeout(timer);}
 }
-
-canvas.addEventListener("pointerdown", startDrawing);
-canvas.addEventListener("pointermove", draw);
-canvas.addEventListener("pointerup", stopDrawing);
-canvas.addEventListener("pointercancel", stopDrawing);
+$('#send-button').addEventListener('click',async()=>{
+  if(busy||!hasDrawing)return;busy=true;toolPanel(false);updateButtons();status('Đang khắc…','',0);
+  try{
+    const form=new FormData();form.append('submission_id',submissionId);
+    form.append('strokes',JSON.stringify({version:1,profile:'led-2px',strokes:strokes.map(stroke=>({erase:Boolean(stroke.erase),...(stroke.erase?{}:{width:stroke.ledWidth}),points:stroke.points.map(p=>[p.x,p.y])}))}));
+    const data=await request('/api/drawings',{method:'POST',body:form});if(typeof data.id!=='string'||!data.image_path)throw new Error('Chưa nhận được xác nhận lưu hình. Hãy thử gửi lại.');
+    strokes=[];undo=[];redo=[];active=null;erasing=false;render();selectPen();changed();status('Đã khắc vào Thời Khắc','success',3200);
+  }catch(error){status('Chưa thể khắc. Thử lại.','error',0);$('#upload-status').title=error.message;}finally{busy=false;updateButtons();}
+});
+async function check(){
+  $('#connection-status').textContent='Đang kết nối…';try{const data=await request('/api/health',{},5000);if(data.status!=='ok')throw new Error();$('#connection-status').textContent='Đã kết nối';if(networkDown)status('Đã kết nối lại','success');networkDown=false;}catch{networkDown=true;$('#connection-status').textContent='Mất kết nối · đang thử lại…';if(!busy)status('Mất kết nối · đang thử lại…','error',0);}
+}
+async function checkConnection(){if(checking)return;checking=true;try{await check();}finally{checking=false;}}
+window.addEventListener('online',checkConnection);window.addEventListener('offline',()=>{networkDown=true;$('#connection-status').textContent='Mất kết nối · đang thử lại…';if(!busy)status('Mất kết nối · đang thử lại…','error',0);});
+window.addEventListener('pagehide',()=>{clearInterval(healthTimer);persist();});window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
+try{const saved=JSON.parse(localStorage.getItem(draftKey)||'null');if(saved&&Array.isArray(saved.strokes)&&saved.strokes.length<10000&&/^[a-f0-9]{32}$/.test(saved.submissionId)){strokes=saved.strokes.filter(s=>s.led===true&&Array.isArray(s.points)&&s.points.length&&Number.isFinite(s.width));submissionId=saved.submissionId;render();hasDrawing=context.getImageData(0,0,canvas.width,canvas.height).data.some((v,i)=>i%4===3&&v>0);$('#draft-status').textContent='Đã mở lại bản nháp';}}catch{strokes=[];render();}
+try{const prefs=JSON.parse(localStorage.getItem(preferencesKey)||'null');if(Number.isInteger(prefs?.monoLevel)&&prefs.monoLevel>=1&&prefs.monoLevel<=5)monoLevel=prefs.monoLevel;}catch{}
+chooseMonoLevel(monoLevel);selectPen();updateButtons();checkConnection();healthTimer=setInterval(()=>{if(!document.hidden)checkConnection();},20000);

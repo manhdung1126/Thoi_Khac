@@ -1,91 +1,35 @@
 <!doctype html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloud of Strokes — Draw</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="app.js" defer></script>
-  </head>
-
-  <body>
-    <header class="intro">
-      <p class="eyebrow">Bước 1 / 2</p>
-      <h1>Để lại nét vẽ của bạn</h1>
-      <p class="intro-text">Vẽ một điều bạn muốn gửi vào không gian chung.</p>
-    </header>
-
-    <main class="workspace">
-      <section class="panel" aria-labelledby="drawing-heading">
-        <h2 class="panel-title" id="drawing-heading">Vùng vẽ</h2>
-
-        <canvas
-          class="drawing-canvas"
-          id="drawing-canvas"
-          width="360"
-          height="480"
-          aria-label="Vùng vẽ của khách tham quan"
-        >
-          Trình duyệt của bạn không hỗ trợ vùng vẽ Canvas.
-        </canvas>
-      </section>
-
-      <section class="panel" aria-labelledby="color-heading">
-        <h2 class="panel-title" id="color-heading">Màu nét vẽ</h2>
-
-        <div class="color-list">
-          <button
-            class="tool-button color-button is-selected"
-            type="button"
-            data-color="#ffc76a"
-            data-color-name="Vàng ấm"
-            aria-pressed="true"
-          >
-            <span class="color-swatch color-swatch--gold" aria-hidden="true"></span>
-            Vàng ấm
-          </button>
-          <button
-            class="tool-button color-button"
-            type="button"
-            data-color="#ffffff"
-            data-color-name="Trắng"
-            aria-pressed="false"
-          >
-            <span class="color-swatch color-swatch--white" aria-hidden="true"></span>
-            Trắng
-          </button>
-          <button
-            class="tool-button color-button"
-            type="button"
-            data-color="#ff8a3d"
-            data-color-name="Cam"
-            aria-pressed="false"
-          >
-            <span class="color-swatch color-swatch--orange" aria-hidden="true"></span>
-            Cam
-          </button>
-        </div>
-
-        <p class="selection-status">
-          Màu đang chọn: <strong id="selected-color-name">Vàng ấm</strong>
-        </p>
-      </section>
-
-      <section class="panel" aria-labelledby="action-heading">
-        <h2 class="panel-title" id="action-heading">Hành động</h2>
-
-        <div class="action-list">
-          <button class="tool-button" type="button" disabled>Hoàn tác</button>
-          <button class="tool-button" type="button" disabled>Xóa hết</button>
-          <button class="tool-button primary-button" type="button" disabled>
-            Gửi nét vẽ
-          </button>
-        </div>
-      </section>
-    </main>
-
-    <footer class="page-footer">
-      <p>Chọn màu, sau đó kéo chuột hoặc ngón tay trên vùng vẽ.</p>
-    </footer>
-  </body>
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eeeae0"><title>Khắc nét - THỜI KHẮC</title>
+  <link rel="icon" type="image/png" href="/shared/assets/exhibition-logo.png">
+  <link rel="stylesheet" href="style.css?v=20260929-final1"><script type="module" src="app.js?v=20260929-svg1"></script>
+</head>
+<body data-profile="led">
+<main class="draw-app">
+  <section class="drawing-stage" aria-label="Bảng vẽ Thời Khắc">
+    <div class="top-controls" aria-label="Công cụ vẽ">
+      <button id="eraser-button" class="floating-control tool-eraser" type="button" aria-label="Tẩy" title="Tẩy" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.2 17.5-3.1-3.1a2 2 0 0 1 0-2.8l7.5-7.5a2 2 0 0 1 2.8 0l5.5 5.5a2 2 0 0 1 0 2.8l-5.1 5.1H7.2Z"/><path d="m8.2 7.5 8.3 8.3M7.2 17.5h12.3"/></svg>
+      </button>
+      <div class="history-tools">
+        <button id="undo-button" class="floating-control" type="button" title="Hoàn tác" aria-label="Hoàn tác" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 8-4 4 4 4"/><path d="M5 12h8a6 6 0 0 1 6 6"/></svg></button>
+        <button id="redo-button" class="floating-control" type="button" title="Làm lại" aria-label="Làm lại" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 8 4 4-4 4"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></svg></button>
+      </div>
+      <button id="send-button" class="carve-action" type="button" aria-label="Khắc tác phẩm" disabled>Khắc</button>
+    </div>
+    <div class="paper"><span id="paper-hint" class="sr-only">Bắt đầu nét vẽ của bạn</span><canvas id="drawing-canvas" width="720" height="720" aria-label="Vùng vẽ của khách tham quan">Trình duyệt chưa hỗ trợ Canvas.</canvas></div>
+    <button id="pencil-button" class="floating-control tool-pen" type="button" aria-label="Bút" title="Bút" aria-pressed="true" aria-expanded="false" aria-controls="tool-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 5.3 4 4M4 20l3.6-.8L19.4 7.4a1.4 1.4 0 0 0 0-2l-.8-.8a1.4 1.4 0 0 0-2 0L4.8 16.4 4 20Z"/><path d="m13.4 7.8 2.8 2.8"/></svg></button>
+    <aside id="tool-panel" class="tool-panel" aria-label="Tùy chỉnh nét vẽ" hidden>
+      <button id="close-tool-panel" class="panel-close" type="button" aria-label="Đóng tùy chỉnh bút" title="Đóng">×</button>
+      <span id="tool-label" class="sr-only">Mono line · mức 3/5</span>
+      <output id="mono-width-value" class="sr-only">Mức 3 · 2 px LED</output><span id="led-scale-help" class="sr-only">Mức 3: ≈10,29 px trên bảng → 2 px LED.</span>
+      <div class="mono-widths" role="group" aria-label="Chọn một trong năm mức độ rộng nét"><button type="button" data-mono-width="1" aria-label="Nét mức 1" aria-pressed="false">1</button><button type="button" data-mono-width="2" aria-label="Nét mức 2" aria-pressed="false">2</button><button type="button" data-mono-width="3" aria-label="Nét mức 3" aria-pressed="true">3</button><button type="button" data-mono-width="4" aria-label="Nét mức 4" aria-pressed="false">4</button><button type="button" data-mono-width="5" aria-label="Nét mức 5" aria-pressed="false">5</button></div>
+      <div class="brush-sample"><canvas id="brush-preview" width="280" height="48" aria-label="Mẫu nét Mono line mức 3"></canvas></div>
+    </aside>
+    <p id="upload-status" class="toast" role="status" aria-live="polite" hidden></p><span id="draft-status" class="sr-only">Bản nháp trên thiết bị này</span><span id="connection-status" class="sr-only" role="status">Đang kết nối…</span>
+  </section>
+</main>
+</body>
 </html>

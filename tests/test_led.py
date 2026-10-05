@@ -23,6 +23,14 @@ class LEDTests(unittest.TestCase):
         vectors={'version':1,'profile':'led-2px','strokes':[{'erase':False,'width':2,'points':[[10,10],[60,60]]}]}
         return self.client.post('/api/drawings',data={'submission_id':key or uuid4().hex,'strokes':json.dumps(vectors),**(extra or {})})
     def state(self):return self.client.get('/api/state').json()
+    def test_frontend_code_revalidates_cache_but_images_keep_normal_caching(self):
+        for path in ['/draw/','/control/','/display/','/draw/app.js','/shared/monoline.js','/draw/style.css']:
+            response=self.client.get(path);self.assertEqual(response.status_code,200)
+            self.assertEqual(response.headers.get('cache-control'),'no-cache')
+            cached=self.client.get(path,headers={'If-None-Match':response.headers['etag']})
+            self.assertEqual(cached.status_code,304)
+            self.assertEqual(cached.headers.get('cache-control'),'no-cache')
+        self.assertNotIn('cache-control',self.client.get('/display/assets/led-scroll.png').headers)
     def test_first_27_fill_empty_then_new_picture_replaces_random_cell_and_keeps_history(self):
         with patch('backend.app.led.secrets.choice',side_effect=lambda choices:choices[-1]):
             ids=[self.upload().json()['id'] for _ in range(27)]
@@ -81,7 +89,10 @@ class LEDTests(unittest.TestCase):
             self.assertFalse(store.rotate())
 
     def test_pause_keeps_remaining_time_and_manual_show_only_resets_one_cell(self):
-        ids=[self.upload().json()['id'] for _ in range(4)]
+        # Keep initial random uploads away from target cells 0/1, otherwise a
+        # no-op move may retain a different queue order and make this flaky.
+        with patch('backend.app.led.secrets.choice',side_effect=lambda choices:choices[-1]):
+            ids=[self.upload().json()['id'] for _ in range(4)]
         with patch('backend.app.main.time.time',return_value=100):
             for index,drawing_id in enumerate(ids):
                 self.client.post('/api/items',json={'drawing_id':drawing_id,'cell_id':index//2},headers=self.auth).raise_for_status()
@@ -138,8 +149,8 @@ class LEDTests(unittest.TestCase):
         self.assertIn('viewBox="0 0 720 720"',svg)
         self.assertNotIn('<rect width="720" height="720" fill="#',svg)
         self.assertIn('<mask id="e0"',svg)
-        self.assertIn('stroke-width="10.286"',svg)
-        self.assertIn('r="7.714"',svg)
+        self.assertIn('stroke-width="13.091"',svg)
+        self.assertIn('r="9.818"',svg)
         self.assertLess(svg.index('mask="url(#e0)"'),svg.rindex('fill="#FFD700"'))
     def test_existing_page_migrates_without_losing_overflow(self):
         page={'items':[{'drawing_id':str(i)} for i in range(32)]}
@@ -147,6 +158,34 @@ class LEDTests(unittest.TestCase):
         self.assertEqual(sum(len(c['drawing_ids']) for c in page['cells']),32)
         self.assertEqual(len(page['items']),27)
         original=json.dumps(page);led.ensure_cells(page);self.assertEqual(json.dumps(page),original)
+    def test_graphite_roundtrip_validation_transparency_and_restart(self):
+        data={'version':2,'profile':'led-2px','strokes':[
+            {'erase':False,'material':'graphite-v1','seed':17,'width':2,'points':[[10,20,.2],[200,200,.8]]},
+            {'erase':True,'points':[[100,100]]},
+            {'erase':False,'material':'graphite-v1','seed':17,'width':1,'points':[[300,300,.5]]},
+        ]}
+        key=uuid4().hex;first=self.upload({'strokes':json.dumps(data)},key);first.raise_for_status()
+        self.assertEqual(self.client.get(first.json()['vector_path']).json(),data)
+        self.assertTrue(self.upload({'strokes':json.dumps(data)},key).json()['replayed'])
+        svg=self.client.get(first.json()['image_path']).text
+        self.assertIn('data-material="graphite-v1"',svg);self.assertIn('fill="#514739"',svg)
+        self.assertIn('opacity="0.89"',svg);self.assertIn('stroke-width="13.091"',svg)
+        self.assertEqual(svg.count('<pattern '),1);self.assertIn('mask="url(#e1)"',svg)
+        self.assertNotIn('fill="#faf3db"',svg);self.assertNotIn('<script',svg)
+        restarted=Store(self.temp.name)
+        self.assertEqual(next(d for d in restarted.public()['drawings'] if d['id']==first.json()['id'])['vector_path'],first.json()['vector_path'])
+        before=self.state()['revision']
+        for field,value in [('seed',-1),('seed',256),('seed',True),('material','<script>'),('width',4)]:
+            invalid=json.loads(json.dumps(data));invalid['strokes'][0][field]=value
+            self.assertEqual(self.upload({'strokes':json.dumps(invalid)}).status_code,422)
+        for p in [float('nan'),-1,1.01,True]:
+            invalid=json.loads(json.dumps(data));invalid['strokes'][0]['points'][0][2]=p
+            self.assertEqual(self.upload({'strokes':json.dumps(invalid)}).status_code,422)
+        invalid={**data,'version':1};self.assertEqual(self.upload({'strokes':json.dumps(invalid)}).status_code,422)
+        self.assertEqual(self.state()['revision'],before)
+        mixed=json.loads(json.dumps(data));mixed['strokes'].append({'erase':False,'width':2,'points':[[400,400],[600,600]]})
+        svg=led.svg_document(led.validate_vectors(json.dumps(mixed))).decode()
+        self.assertIn('<linearGradient id="legacy"',svg);self.assertIn('stroke="url(#legacy)"',svg)
     def test_cell_assignment_move_and_invalid_mutation_are_atomic(self):
         id=self.upload().json()['id']
         self.client.post('/api/items',json={'drawing_id':id,'cell_id':4},headers=self.auth).raise_for_status()
@@ -156,3 +195,29 @@ class LEDTests(unittest.TestCase):
         self.assertEqual(self.state()['revision'],before)
         self.assertEqual(current_page(self.state())['cells'][4]['drawing_ids'],[id])
         self.assertEqual(self.client.patch('/api/settings',json={'led_dim':1.1},headers=self.auth).status_code,422)
+
+    def test_mono_pressure_roundtrip_transparency_and_validation(self):
+        data={'version':2,'profile':'led-2px','strokes':[
+            {'erase':False,'material':'mono-v1','width':2,'points':[[10,20,.1],[200,20,.9]]},
+            {'erase':True,'points':[[100,20]]},
+            {'erase':False,'material':'mono-v1','width':1,'points':[[300,300,1]]},
+        ]}
+        key=uuid4().hex;first=self.upload({'strokes':json.dumps(data)},key);first.raise_for_status()
+        self.assertEqual(self.client.get(first.json()['vector_path']).json(),data)
+        self.assertTrue(self.upload({'strokes':json.dumps(data)},key).json()['replayed'])
+        svg=self.client.get(first.json()['image_path']).text
+        self.assertIn('data-material="mono-v1"',svg);self.assertIn('opacity="0.95"',svg)
+        self.assertIn('stroke-width="13.091"',svg);self.assertIn('mask="url(#e1)"',svg)
+        self.assertNotIn('<pattern',svg);self.assertNotIn('<script',svg)
+        self.assertNotIn('<rect width="720" height="720" fill="#',svg)
+        restarted=Store(self.temp.name)
+        self.assertTrue(any(d['id']==first.json()['id'] for d in restarted.public()['drawings']))
+        before=self.state()['revision']
+        for p in [float('nan'),float('inf'),-1,1.01,True]:
+            invalid=json.loads(json.dumps(data));invalid['strokes'][0]['points'][0][2]=p
+            self.assertEqual(self.upload({'strokes':json.dumps(invalid)}).status_code,422)
+        for version,material,erase in [(1,'mono-v1',False),(2,'unknown',False),(2,'mono-v1',True)]:
+            invalid=json.loads(json.dumps(data));invalid['version']=version
+            invalid['strokes'][0].update(material=material,erase=erase)
+            self.assertEqual(self.upload({'strokes':json.dumps(invalid)}).status_code,422)
+        self.assertEqual(self.state()['revision'],before)

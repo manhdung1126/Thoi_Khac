@@ -34,9 +34,10 @@ Dùng địa chỉ LAN được in trong terminal trên điện thoại. `127.0.
 
 ## Tính năng hiện tại
 
-- **Draw:** Mono line vàng, năm mức độ rộng, tẩy, hoàn tác/làm lại, bản nháp cục bộ và gửi chống trùng. Server sinh SVG nền trong suốt và xóa bảng sau khi xác nhận thành công.
-- **Display LED:** 1536×768, 27 ô cố định 140×140; hình mới vào ô ngẫu nhiên, mỗi ô luân phiên danh sách bằng crossfade. Nền đen ánh vàng thử nghiệm, nét metallic có phản quang chuyển động.
+- **Draw:** nét Mono line vàng đặc, đều, năm mức độ rộng, tẩy alpha, hoàn tác/làm lại, bản nháp cục bộ và gửi chống trùng. Server sinh SVG nền trong suốt và xóa bảng sau khi xác nhận thành công. Display thêm ánh kim riêng cho trình chiếu; tác phẩm graphite đã có vẫn đọc được. Chi tiết: [docs/DRAW_MATERIAL.md](docs/DRAW_MATERIAL.md).
+- **Display LED:** 1536×768, 27 ô 110×110 chia hàng 9–10–8 trong nền cuộn sớ; hình mới vào ô ngẫu nhiên, mỗi ô luân phiên danh sách bằng crossfade. Nét metallic có phản quang chuyển động.
 - **Control:** chọn/tạo trang, chọn ô và thêm/chuyển hình, hiện ngay hoặc bỏ khỏi ô, tạm dừng luân phiên, Yêu thích, thùng rác/khôi phục/xóa vĩnh viễn, lưu/tải/xóa khoảnh khắc.
+- **Dấu Ấn:** tải ảnh đích và xem thử với 27–1.500 hình ngay trong Control. Nét mẫu chỉ dùng cục bộ; chuẩn bị và phát trên LED dùng snapshot nét thật. Hướng dẫn: [docs/ENDING_CONTROL.md](docs/ENDING_CONTROL.md).
 
 ## Cấu trúc
 
@@ -45,13 +46,15 @@ run.py                  Điểm chạy duy nhất
 backend/
   app/main.py           FastAPI, lưu trữ, xác thực, API và WebSocket
   app/led.py            Danh sách 27 ô và kiểm tra dữ liệu đường nét
+  app/ending.py         Kiểm tra mask và chốt bộ nét Ending
   requirements.txt      Thư viện Python
   storage/              Dữ liệu triển lãm, không đưa vào Git
 frontend/
   draw/                 Giao diện và xử lý bút
   display/              Màn LED, crossfade và tài nguyên nền
   control/              Quản trị và lưu khoảnh khắc
-  shared/               API client, nét Mono, metallic và phần dùng chung
+  ending/               Engine hội tụ và preview chung cho Control/Display
+  shared/               API client, hình học nét, graphite, metallic và phần dùng chung
 tests/                  Kiểm thử Python và JavaScript
 docs/LED_INSTALLATION.md Thông số LED, vận hành và vị trí chỉnh cấu hình
 ```

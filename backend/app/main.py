@@ -21,11 +21,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
-from backend.app import led
+from backend.app import led, ending
 
 ROOT = Path(__file__).resolve().parents[1]
 VECTOR_LIMIT = 2 * 1024 * 1024
 SNAPSHOT_LIMIT = 10 * 1024 * 1024
+
+
+class FrontendFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        # Revalidate code, including conditional 304 replies. Keep image/font caching.
+        if Path(path).suffix in ('', '.html', '.js', '.css'):
+            response.headers['Cache-Control'] = 'no-cache'
+        return response
 
 
 def identifier(value):
@@ -101,7 +110,7 @@ def page_by_id(state, page_id):
 
 
 def add_item(state, drawing_id):
-    led.assign(current_page(state), drawing_id, paused=state['settings']['paused'])
+    led.assign(current_page(state), drawing_id, paused=state['settings']['paused'] or bool(state.get('ending')))
 
 
 class Store:
@@ -112,6 +121,7 @@ class Store:
         self.path = self.directory / "state.json"
         self.tokens = set()
         self.login_attempts = {}
+        self.ending_ready = {}
         if self.path.exists():
             # A corrupt state is an explicit startup error, never a silent reset.
             self.state = json.loads(self.path.read_text())
@@ -181,8 +191,17 @@ class Store:
     def public(self):
         with self.lock:
             state = copy.deepcopy(self.state)
+            # Items are a derived presentation view; keep persisted cell queues
+            # and independent carousel clocks unchanged when geometry changes.
+            for page in state['pages']:
+                led.sync_items(page)
             state.pop("submissions", None)
             state["server_time"] = time.time()
+            if state.get("ending"):
+                active = state["ending"]
+                active["ready_displays"] = [client for client, seen in self.ending_ready.get(active["id"], {}).items() if time.time() - seen < 45]
+                if active.get("start_time") and state["server_time"] >= active["start_time"] + active["duration"]:
+                    active["phase"] = "LOCKED"
             return state
 
     def mutate(self, callback):
@@ -191,7 +210,7 @@ class Store:
             result = callback(state)
             now = time.time()
             for page in state['pages']:
-                running = page['id'] == state['current_page_id'] and not state['settings']['paused']
+                running = page['id'] == state['current_page_id'] and not state['settings']['paused'] and not state.get('ending')
                 if not running:
                     page.setdefault('timer_paused_at', now)
                 elif 'timer_paused_at' in page:
@@ -232,7 +251,7 @@ class Store:
     def rotate(self):
         with self.lock:
             settings = self.state["settings"]
-            if settings['paused']:
+            if settings['paused'] or self.state.get('ending'):
                 return False
             now = time.time()
             page = current_page(self.state)
@@ -250,7 +269,7 @@ class BodyLimitMiddleware:
         if scope["type"] != "http" or scope["method"] not in {"POST", "PATCH", "PUT"}:
             return await self.app(scope, receive, send)
         path = scope["path"]
-        limit = {"/api/drawings": VECTOR_LIMIT, "/api/snapshots": SNAPSHOT_LIMIT + 65536}.get(path, 65536)
+        limit = {"/api/drawings": VECTOR_LIMIT, "/api/snapshots": SNAPSHOT_LIMIT + 65536, "/api/ending/prepare": 256 * 1024}.get(path, 65536)
         headers = dict(scope["headers"])
         try:
             length = int(headers.get(b"content-length", b"0"))
@@ -433,6 +452,72 @@ def create_app(storage_path=None):
         await broadcast()
         return item
 
+    @app.post("/api/ending/prepare")
+    async def prepare_ending(request: Request):
+        require_admin(request)
+        body = await body_object(request)
+        request_id = identifier(body.get("request_id"))
+        def prepare(state):
+            if state.get("ending", {}).get("request_id") == request_id:
+                return
+            ending.prepare(state, body, store.directory)
+            state["ending"]["request_id"] = request_id
+        store.mutate(prepare)
+        await broadcast()
+        return store.public()
+
+    @app.post("/api/ending/{ending_id}/ready")
+    async def ready_ending(ending_id: str, request: Request):
+        # Display reports readiness only; it cannot start/reset an exhibition.
+        body = await body_object(request)
+        client_id = identifier(body.get("client_id"))
+        with store.lock:
+            active = store.state.get("ending")
+            if not active or active["id"] != identifier(ending_id):
+                raise HTTPException(409, "Ending đã thay đổi.")
+            clients = store.ending_ready.setdefault(active["id"], {})
+            expired = [key for key, seen in clients.items() if time.time() - seen >= 45]
+            for key in expired:
+                clients.pop(key)
+            if body.get("ready") is True:
+                if len(clients) >= 32 and client_id not in clients:
+                    raise HTTPException(429, "Quá nhiều màn chiếu.")
+                clients[client_id] = time.time()
+            else:
+                clients.pop(client_id, None)
+        await broadcast()
+        return {"ok": True}
+
+    @app.post("/api/ending/{ending_id}/start")
+    async def start_ending(ending_id: str, request: Request):
+        require_admin(request)
+        def start(state):
+            active = state.get("ending")
+            if not active or active["id"] != identifier(ending_id):
+                raise HTTPException(409, "Ending đã thay đổi.")
+            if active.get("start_time") is not None:
+                return
+            if not any(time.time() - seen < 45 for seen in store.ending_ready.get(active["id"], {}).values()):
+                raise HTTPException(409, "Mở Display và đợi màn chiếu tải đủ nét trước khi bắt đầu.")
+            active["phase"] = "CONVERGE"
+            active["start_time"] = time.time() + 2
+        store.mutate(start)
+        await broadcast()
+        return store.public()
+
+    @app.post("/api/ending/{ending_id}/reset")
+    async def reset_ending(ending_id: str, request: Request):
+        require_admin(request)
+        def reset(state):
+            active = state.get("ending")
+            if active and active["id"] != identifier(ending_id):
+                raise HTTPException(409, "Ending đã thay đổi.")
+            state.pop("ending", None)
+        store.mutate(reset)
+        store.ending_ready.clear()
+        await broadcast()
+        return store.public()
+
     @app.api_route("/api/{operation:path}", methods=["POST", "PATCH", "DELETE"])
     async def control(operation: str, request: Request):
         require_admin(request)
@@ -440,6 +525,10 @@ def create_app(storage_path=None):
         parts = operation.split("/")
         files_to_delete = []
         def change(state):
+            active_ending = state.get("ending")
+            if active_ending and ((parts[0] == "pages" and parts[-1] == "activate") or
+                (parts[0] == "pages" and len(parts) == 2 and request.method == "DELETE" and parts[1] == active_ending["page_id"])):
+                raise HTTPException(409, "Quay lại Normal trước khi chuyển hoặc xóa trang đang Ending.")
             if operation == "settings" and request.method == "PATCH":
                 settings = state["settings"]
                 for key, value in body.items():
@@ -546,6 +635,8 @@ def create_app(storage_path=None):
                 elif len(parts) == 3 and parts[2] == "restore" and request.method == "POST":
                     drawing["deleted"] = False
                 elif len(parts) == 3 and parts[2] == "purge" and request.method == "DELETE":
+                    if drawing_id in ending.protected_ids(state):
+                        raise HTTPException(409, "Nét đang thuộc bộ Ending. Quay lại Normal trước khi xóa vĩnh viễn.")
                     if not drawing["deleted"]:
                         raise HTTPException(409, "Hãy đưa nét vẽ vào thùng rác trước khi xóa vĩnh viễn.")
                     for page in state["pages"]:
@@ -568,6 +659,8 @@ def create_app(storage_path=None):
                 if not snapshot:
                     raise HTTPException(404, "Không tìm thấy ảnh bố cục.")
                 page_id = snapshot.get("page_id")
+                if state.get("ending", {}).get("page_id") == page_id:
+                    raise HTTPException(409, "Khoảnh khắc đang dùng cho Ending. Quay lại Normal trước.")
                 if page_id and page_id == state["current_page_id"]:
                     raise HTTPException(409, "Hãy chuyển sang trang khác trước khi xóa khoảnh khắc đang chiếu.")
                 if page_id:
@@ -600,7 +693,7 @@ def create_app(storage_path=None):
         finally:
             connections.discard(connection)
 
-    app.mount("/", StaticFiles(directory=ROOT.parent / "frontend", html=True), name="frontend")
+    app.mount("/", FrontendFiles(directory=ROOT.parent / "frontend", html=True), name="frontend")
     return app
 
 

@@ -1,5 +1,6 @@
 import { subscribeState } from "../shared/api.js";
-import { LEDScene } from './led-scene.js?v=20260930-metal2';
+import { LEDScene } from './led-scene.js?v=20261006-exhibition';
+import {EndingPresentation} from '../ending/session.js';
 
 const controls = document.querySelector("#display-controls");
 const errorLabel = document.querySelector("#display-error");
@@ -11,8 +12,16 @@ function report(message) {
 // The dedicated exhibition screen explicitly enables the lighting effect.
 // Operators can still request a static presentation with ?motion=off.
 const scene = new LEDScene(document.querySelector('#stage'), {onError: report, animateMetal:new URLSearchParams(location.search).get('motion')!=='off'});
+const endingHost=document.createElement('div');document.body.append(endingHost);
+const endingScene=new EndingPresentation(endingHost,{display:true,onError:report});
 const subscription = subscribeState(state => {
-  scene.render(state);
+  endingScene.update(state);
+  if(state.ending){
+    const frozen={...state,pages:[{id:state.ending.page_id,cells:state.ending.cells}],drawings:state.ending.drawings,current_page_id:state.ending.page_id};
+    scene.render(frozen);
+  }else scene.render(state);
+  scene.animateMetal=!state.ending&&new URLSearchParams(location.search).get('motion')!=='off';
+  scene.resumeShine();
 }, status => {
   document.querySelector("#connection-status").textContent = status.message;
 });
@@ -49,7 +58,7 @@ document.addEventListener("keydown", keydown);
 document.addEventListener("fullscreenchange", fullscreenChange);
 setControls(new URLSearchParams(location.search).get("debug") === "1");
 window.addEventListener("pagehide", () => {
-  subscription.close(); scene.destroy();
+  subscription.close(); scene.destroy();endingScene.destroy();
   document.removeEventListener("keydown", keydown);
   document.removeEventListener("fullscreenchange", fullscreenChange);
 }, { once: true });

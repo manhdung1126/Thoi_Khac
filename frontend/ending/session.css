@@ -1,0 +1,6 @@
+.ending-presentation{position:relative;width:100%;height:100%;overflow:hidden;background:var(--projection-matte,#214b50)}
+.ending-frame{position:absolute;left:50%;top:50%;width:1536px;height:768px;transform-origin:center}
+.ending-frame>canvas,.ending-background{position:absolute;inset:0;width:100%;height:100%}
+.ending-final-text{position:absolute;left:25%;right:25%;bottom:160px;margin:0;color:#36572d;text-align:center;font:18px/1.4 system-ui,sans-serif}
+.ending-presentation[hidden],.ending-final-text[hidden]{display:none!important}
+body>.ending-presentation{position:fixed;inset:0;z-index:2}

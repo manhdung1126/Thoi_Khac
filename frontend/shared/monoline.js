@@ -3,6 +3,13 @@
 // never predicts or overshoots the pointer. Deliberate sharp turns remain sharp.
 const monoPoint = value => Array.isArray(value) ? {x:value[0],y:value[1]} : value;
 
+export const MONO_MATERIAL='mono-v1';
+// One density for the whole path; pressure never changes its width or geometry.
+export function monoOpacity(points){
+  const mean=points.reduce((sum,p)=>sum+Math.max(0,Math.min(1,(Array.isArray(p)?p[2]:p.p)??.55)),0)/Math.max(1,points.length);
+  return Math.round((.9+.1*mean)*1000)/1000;
+}
+
 function turn(before,current,after){
   const ax=current.x-before.x,ay=current.y-before.y,bx=after.x-current.x,by=after.y-current.y;
   const a=Math.hypot(ax,ay),b=Math.hypot(bx,by);
@@ -49,9 +56,9 @@ export function traceMonoPath(ctx,points,map=value=>monoPoint(value)){
   const last=stable.at(-1);ctx.lineTo(last.x,last.y);return true;
 }
 
-export function paintMonoStroke(ctx,{points,width,color,erase=false,map}){
+export function paintMonoStroke(ctx,{points,width,color,erase=false,map,opacity=1}){
   if(!points?.length)return;
-  ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation=erase?'destination-out':'source-over';
+  ctx.save();ctx.globalAlpha=opacity;ctx.globalCompositeOperation=erase?'destination-out':'source-over';
   ctx.strokeStyle=ctx.fillStyle=color;ctx.lineWidth=width;ctx.lineCap=ctx.lineJoin='round';ctx.beginPath();
   const convert=map||(value=>monoPoint(value));
   if(points.length===1){const p=convert(points[0]);ctx.arc(p.x,p.y,width/2,0,Math.PI*2);ctx.fill();}

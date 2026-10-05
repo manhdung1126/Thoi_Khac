@@ -1,5 +1,6 @@
 import { api, apiUrl, getToken, setToken, subscribeState } from "../shared/api.js";
-import { Stage } from "./stage.js";
+import { Stage } from "./stage.js?v=20261006-exhibition";
+import {EndingControl} from './ending.js';
 
 const $ = selector => document.querySelector(selector);
 let state, busy = false, libraryView = "active", selectedCell = 0, selectedPageId, notificationTimer;
@@ -27,6 +28,7 @@ const stage = new Stage($("#stage"), {
   onCell: index => { selectedCell = index; renderCells(); renderLibrary(); },
   onError: message => notice(message, true),
 });
+const endingControl=new EndingControl({mutate,notice,getState:()=>state,onAccess:access});
 
 async function mutate(path, method = "POST", body = {}, message = "Đã cập nhật.") {
   if (busy) return;
@@ -176,12 +178,15 @@ function render(value) {
     select.value = selectedPageId;
   }
   const showing = selectedPageId === value.current_page_id;
-  $("#stage-title").textContent = showing ? "Trình chiếu trực tiếp" : "Bản xem trước trang";
+  $(".stage-panel").toggleAttribute("data-preview", !showing);
+  $("#stage-title").textContent = showing&&value.ending?.start_time?"Dấu Ấn · trực tiếp":showing ? "Trình chiếu trực tiếp" : "Bản xem trước trang";
   $("#show-page").textContent = showing ? "Đang chiếu" : "Chiếu trang";
-  $("#show-page").toggleAttribute("data-locked", showing);
+  $("#show-page").toggleAttribute("data-locked", showing||!!value.ending);
+  $("#snapshot-button").toggleAttribute("data-locked",showing&&!!value.ending);
+  $("#pause-button").toggleAttribute("data-locked",!!value.ending);
   $("#delete-page").toggleAttribute("data-locked", value.pages.length <= 1);
   $("#delete-page").title = value.pages.length <= 1 ? "Cần giữ ít nhất một trang" : "Xóa trang";
-  renderCells(); renderLibrary(); renderSnapshots(); access();
+  renderCells(); renderLibrary(); renderSnapshots(); endingControl.render(value);access();
 }
 
 const subscription = subscribeState(render, status => { $("#connection-status").textContent = `${status.connected ? "●" : "○"} ${status.message}`; $("#connection-status").classList.toggle("connected", status.connected); });
@@ -242,6 +247,6 @@ $("#snapshot-button").addEventListener("click", async () => {
   finally { busy = false; access(); }
 });
 
-window.addEventListener("pagehide", () => { subscription.close(); stage.destroy(); });
+window.addEventListener("pagehide", () => { subscription.close(); stage.destroy();endingControl.destroy(); });
 window.addEventListener("pageshow", event => { if (event.persisted) location.reload(); });
 access(); if (!getToken()) openLogin();

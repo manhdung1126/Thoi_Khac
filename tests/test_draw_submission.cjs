@@ -8,7 +8,7 @@ function drawingPage(responses, savedStorage, profile='') {
   const monoButtons=Array.from({length:5},(_,index)=>({dataset:{monoWidth:String(index+1)},handlers:{},setAttribute(name,value){this[name]=value;},addEventListener(name,fn){this.handlers[name]=fn;}}));
   let ink = false;
   const context = {
-    save() {}, restore() {}, beginPath() {}, arc() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {},setTransform(){},drawImage(){},
+    save() {}, restore() {}, beginPath() {}, arc() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {},setTransform(){},drawImage(){},createPattern(){return {setTransform(){}};},
     fill() { ink = true; }, stroke() { ink = true; }, clearRect() { ink = false; },
     getImageData() { return {data: [0, 0, 0, ink ? 255 : 0]}; },
   };
@@ -24,8 +24,8 @@ function drawingPage(responses, savedStorage, profile='') {
     getContext: () => context, getBoundingClientRect: () => ({left: 0, top: 0, width: 720, height: 720}),
     setPointerCapture() {}, hasPointerCapture: () => false,
   });
-  Object.assign(element('#brush-preview'), {width:280,height:48,getContext:()=>({save(){},restore(){},clearRect(){},beginPath(){},arc(){},fill(){},moveTo(){},lineTo(){},quadraticCurveTo(){},stroke(){},setTransform(){}})});
-  const offscreenContext={setTransform(){},clearRect(){},drawImage(){}};
+  Object.assign(element('#brush-preview'), {width:280,height:48,getContext:()=>({save(){},restore(){},clearRect(){},beginPath(){},arc(){},fill(){},moveTo(){},lineTo(){},quadraticCurveTo(){},stroke(){},setTransform(){},createPattern(){return {setTransform(){}};}})});
+  const offscreenContext={setTransform(){},clearRect(){},drawImage(){},scale(){},fillRect(){},beginPath(){},arc(){},fill(){}};
   const sandbox = vm.createContext({
     document: {body:{dataset:{profile},classList:{toggle(){}}},addEventListener(){},querySelector: element, querySelectorAll: selector=>selector==='[data-mono-width]'?monoButtons:[],createElement:tag=>tag==='canvas'?{width:0,height:0,getContext:()=>offscreenContext}:element(`created-${tag}`)},
     location: {port: '8000', origin: 'http://localhost:8000'},
@@ -44,6 +44,7 @@ function drawingPage(responses, savedStorage, profile='') {
     },
   });
   vm.runInContext(fs.readFileSync('frontend/shared/monoline.js', 'utf8').replaceAll('export function', 'function').replaceAll('export const','const'), sandbox);
+  vm.runInContext(fs.readFileSync('frontend/shared/graphite.js', 'utf8').replace(/^import .*\n/gm,'').replaceAll('export function', 'function').replaceAll('export const','const'), sandbox);
   vm.runInContext(fs.readFileSync('frontend/shared/metallic.js', 'utf8').replaceAll('export function', 'function').replaceAll('export const','const'), sandbox);
   vm.runInContext(fs.readFileSync('frontend/shared/led.js', 'utf8').replace(/^import .*\n/gm,'').replaceAll('export function', 'function').replaceAll('export const','const'), sandbox);
   vm.runInContext(fs.readFileSync('frontend/draw/pencil.js', 'utf8').replace(/^import .*\n/gm,'').replaceAll('export function', 'function'), sandbox);
@@ -115,15 +116,16 @@ for (const replayed of [false, true]) test(`confirmed submission clears canvas a
   assert.notEqual(page.uploads[0], page.uploads[1]);
 });
 
-test('Draw scales a 2px line from a 140px LED cell into its 720px canvas',async()=>{
+test('Draw scales a 2px line from a 110px scroll cell into its 720px canvas',async()=>{
   const page=drawingPage([{status:500,body:{detail:'Retry'}},{body:{id:'led',image_path:'/api/drawings/led'}}],undefined,'led');
   page.draw();const stroke=page.draft().strokes[0];
-  assert.equal(stroke.led,true);assert.equal(stroke.color,'#FFD700');
-  assert.equal(stroke.width,2*720/140);
+  assert.equal(stroke.led,true);assert.equal(stroke.color,'#E7BD00');assert.equal(stroke.material,'mono-v1');
+  assert.equal(stroke.width,2*720/110);
   await page.send();await page.send();
   assert.equal(page.uploads[0],page.uploads[1]);assert.equal(page.vectors[0],page.vectors[1]);
   assert.equal(JSON.parse(page.vectors[0]).profile,'led-2px');
-  assert.deepEqual(JSON.parse(page.vectors[0]).strokes[0],{erase:false,width:2,points:[[20,20]]});
+  assert.equal(JSON.parse(page.vectors[0]).version,2);
+  assert.deepEqual(JSON.parse(page.vectors[0]).strokes[0],{erase:false,width:2,material:'mono-v1',points:[[20,20,.55]]});
   assert.equal(page.ink(),false);
 });
 
@@ -131,8 +133,27 @@ test('five Mono levels persist and belong to each new stroke',()=>{
   const page=drawingPage([],undefined,'led');page.monoButtons[0].handlers.click();page.draw();page.monoButtons[4].handlers.click();page.draw();
   const strokes=page.draft().strokes;
   assert.deepEqual(strokes.map(stroke=>stroke.ledWidth),[1,3]);
-  assert.deepEqual(strokes.map(stroke=>stroke.width),[720/140,3*720/140]);
+  assert.deepEqual(strokes.map(stroke=>stroke.width),[720/110,3*720/110]);
   assert.equal(JSON.parse(page.storage.get('cloud-strokes-brush-v1')).monoLevel,5);
+});
+
+test('returning to Mono preserves an existing graphite draft and its export metadata',async()=>{
+  const oldStroke={led:true,color:'#514739',material:'graphite-v1',seed:17,width:2*720/110,ledWidth:2,erase:false,points:[{x:50,y:50,p:.4}]};
+  const saved=new Map([['cloud-strokes-draft-v2',JSON.stringify({submissionId:'a'.repeat(32),strokes:[oldStroke]})]]);
+  const page=drawingPage([{body:{id:'saved',image_path:'/api/drawings/saved'}}],saved,'led');
+  page.draw();assert.equal(page.draft().strokes[1].material,'mono-v1');
+  await page.send();const data=JSON.parse(page.vectors[0]);
+  assert.equal(data.version,2);assert.equal(data.strokes[0].material,'graphite-v1');
+  assert.deepEqual(data.strokes[0].points,[[50,50,.4]]);
+  assert.deepEqual(data.strokes[1],{erase:false,width:2,material:'mono-v1',points:[[20,20,.55]]});
+});
+
+test('solid legacy draft adopts the shared SVG palette without reducing its opacity',async()=>{
+  const oldStroke={led:true,color:'#FFD700',width:2*720/110,ledWidth:2,erase:false,points:[{x:50,y:50}]};
+  const saved=new Map([['cloud-strokes-draft-v2',JSON.stringify({submissionId:'a'.repeat(32),strokes:[oldStroke]})]]);
+  const page=drawingPage([{body:{id:'saved',image_path:'/api/drawings/saved'}}],saved,'led');
+  await page.send();const data=JSON.parse(page.vectors[0]);
+  assert.equal(data.version,2);assert.deepEqual(data.strokes[0],{erase:false,width:2,material:'mono-v1',points:[[50,50,1]]});
 });
 
 test('Mono input consumes coalesced pointer samples, keeps the final finger position and uses a Retina backing store',()=>{

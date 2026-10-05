@@ -2,20 +2,22 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f5efdf"><title>Điều khiển - THỜI KHẮC</title>
+  <meta name="theme-color" content="#faf3db"><title>Điều khiển - THỜI KHẮC</title>
   <link rel="icon" type="image/png" href="/shared/assets/exhibition-logo.png">
-  <link rel="stylesheet" href="../display/led.css?v=20260929-final1"><link rel="stylesheet" href="style.css?v=20260930-page-preview"><script type="module" src="app.js?v=20260930-page-preview"></script>
+  <link rel="stylesheet" href="../ending/session.css">
+  <link rel="stylesheet" href="../display/led.css?v=20261006-exhibition"><link rel="stylesheet" href="style.css?v=20261006-exhibition"><script type="module" src="app.js?v=20261006-exhibition"></script>
 </head>
 <body>
+<a class="skip-link" href="#workspace">Đến bàn điều khiển</a>
 <header class="topbar">
   <a class="brand" href="/"><img class="brand-mark" src="/shared/assets/exhibition-logo.png" alt="Logo triển lãm"> THỜI KHẮC <small>KHÔNG GIAN TRIỂN LÃM</small></a>
   <nav aria-label="Điều hướng"><a href="/draw/" target="_blank" rel="noopener">Bảng vẽ ↗</a><a href="/display/" target="_blank" rel="noopener">Màn chiếu ↗</a><button id="login-button">Đăng nhập</button></nav>
 </header>
-<div class="page-heading"><div><p class="eyebrow">ĐIỀU PHỐI KHÔNG GIAN</p><h1>Bàn điều khiển</h1></div><p id="connection-status" role="status">Đang kết nối…</p></div>
+<div class="page-heading"><h1>Bàn điều khiển</h1><nav class="section-nav" aria-label="Điều khiển triển lãm"><a href="#projection-panel">Trình chiếu</a><a href="#ending-panel">Dấu Ấn</a><a href="#moments-panel">Khoảnh khắc</a></nav><p id="connection-status" role="status">Đang kết nối…</p></div>
 <div id="notice" role="status" class="notice" hidden></div>
 
 <main class="dashboard">
-  <aside class="library-panel panel">
+  <aside class="library-panel panel" aria-label="Kho nét vẽ">
     <div class="panel-title"><h2>Kho nét vẽ</h2><span id="library-count">0</span></div>
     <div class="segmented" aria-label="Thư mục nét vẽ"><button id="show-active" class="active" aria-pressed="true">Tất cả</button><button id="show-favorites" aria-pressed="false">♥ Yêu thích</button><button id="show-trash" aria-pressed="false">Thùng rác</button></div>
     <label class="search-label"><span class="sr-only">Tìm nét vẽ</span><input id="library-search" type="search" placeholder="Tìm mã hình…"></label>
@@ -24,29 +26,45 @@
     <div id="library" class="library"></div>
   </aside>
 
-  <div class="workspace">
-    <section class="stage-panel panel">
+  <div id="workspace" class="workspace">
+    <section id="projection-panel" class="panel pages-panel" aria-label="Trang trình chiếu">
+      <div class="panel-title"><h2>Trang trình chiếu</h2></div>
+      <div class="page-actions"><div class="page-picker"><label><span class="sr-only">Trang đang chọn</span><select id="page-select" data-admin></select></label><button id="rename-page" class="icon-button" data-admin title="Đổi tên trang" aria-label="Đổi tên trang"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Zm10.2-13 3 3M4 20h6"/></svg></button><button id="delete-page" class="icon-button danger" data-admin title="Xóa trang" aria-label="Xóa trang"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg></button></div><button id="show-page" class="primary" data-admin>Chiếu trang</button><button id="new-page" data-admin>＋ Tạo trang</button></div>
+      <p class="page-preview-help">Chọn trang để chỉnh sửa. Chỉ đổi màn LED khi bấm “Chiếu trang”.</p>
+    </section>
+    <section class="stage-panel" aria-label="Xem trước màn LED">
       <div class="stage-toolbar">
         <strong id="stage-title">Trình chiếu trực tiếp</strong>
         <div class="toolbar-actions"><button id="pause-button" data-admin>Tạm dừng</button><button id="refresh-button" title="Lấy dữ liệu mới nhất" aria-label="Làm mới">↻</button><button id="snapshot-button" class="primary" data-admin>Lưu khoảnh khắc</button></div>
       </div>
       <div id="live-display"><div id="stage" aria-label="Chọn ô trên màn trình chiếu"></div></div>
-      <div class="stage-bottom"><span id="stage-count">Đang tải…</span><span>Chạm vào ô để chọn</span></div>
+      <div class="stage-bottom"><span id="stage-count">Đang tải…</span><span>Chọn ô để thêm nét</span></div>
+      <form id="rotation-form" class="inline-setting"><label for="rotation-seconds">Luân phiên mỗi<input id="rotation-seconds" type="number" min="2" max="120" step="1" required data-admin aria-describedby="rotation-help"><span>giây</span></label><button type="submit" data-admin>Áp dụng</button><p id="rotation-help">Mỗi ô có bộ đếm riêng.</p></form>
     </section>
 
     <section id="led-management" class="panel" hidden>
       <div class="panel-title"><h2>Ô trình chiếu</h2><span id="led-cell-count"></span></div>
-      <div class="cell-selector"><label><span>Ô đang chọn</span><select id="led-cell-select"></select></label><p>Chọn một ô, sau đó bấm hình trong Kho nét vẽ để đưa vào đúng ô đó.</p></div>
+      <div class="cell-selector"><label><span class="sr-only">Ô đang chọn</span><select id="led-cell-select"></select></label><p>Thêm hình từ kho nét ở bên cạnh.</p></div>
       <div id="led-queue" class="saved-list"></div>
     </section>
 
-    <section class="panel pages-panel">
-      <div class="panel-title"><h2>Trang trình chiếu</h2></div>
-      <div class="page-actions"><div class="page-picker"><label><span class="sr-only">Trang đang chọn</span><select id="page-select" data-admin></select></label><button id="rename-page" class="icon-button" data-admin title="Đổi tên trang" aria-label="Đổi tên trang"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Zm10.2-13 3 3M4 20h6"/></svg></button><button id="delete-page" class="icon-button danger" data-admin title="Xóa trang" aria-label="Xóa trang"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg></button></div><button id="show-page" class="primary" data-admin>Chiếu trang</button><button id="new-page" data-admin>＋ Tạo trang</button></div>
-      <form id="rotation-form" class="inline-setting"><label for="rotation-seconds">Luân phiên hình mỗi (giây)<input id="rotation-seconds" type="number" min="2" max="120" step="1" required data-admin aria-describedby="rotation-help"></label><button type="submit" data-admin>Áp dụng</button><p id="rotation-help">2–120 giây · mỗi ô đếm riêng từ lúc hình xuất hiện.</p></form>
+    <section id="ending-panel" class="panel ending-panel" aria-labelledby="ending-heading">
+      <div class="panel-title"><h2 id="ending-heading">Dấu Ấn</h2><span id="ending-state" role="status">Chưa chuẩn bị</span></div>
+      <p id="ending-source" class="ending-source"></p>
+      <div class="ending-settings-row">
+        <div class="ending-upload"><img id="ending-mask-thumbnail" alt="Vùng ảnh sẽ được tạo bởi nét vẽ" hidden><label><span>Ảnh đích</span><input id="ending-image" type="file" accept=".png,.jpg,.jpeg,.webp,.svg" aria-describedby="ending-mask-label"><span id="ending-mask-label">Chưa chọn ảnh</span></label></div>
+        <label><span>Xem thử với</span><select id="ending-preview-count" aria-describedby="ending-preview-help"><option value="live">Nét thật</option><option value="27">27 hình</option><option value="50">50 hình</option><option value="100" selected>100 hình</option><option value="250">250 hình</option><option value="500">500 hình</option><option value="1000">1.000 hình</option><option value="1500">1.500 hình</option></select></label>
+        <button id="ending-preview-open" disabled>Xem thử</button>
+      </div>
+      <div class="ending-actions">
+        <button id="ending-prepare" data-admin data-locked>Chuẩn bị LED</button>
+        <button id="ending-start" class="primary" data-admin data-locked>Bắt đầu trên LED</button>
+        <button id="ending-reset" data-admin data-locked>Về trình chiếu</button>
+      </div>
+      <p id="ending-preview-help" class="ending-help">Xem thử bổ sung nét mẫu khi chưa đủ hình. LED chỉ dùng nét thật của trang đang chiếu.</p>
+      <details class="ending-mask-tuning"><summary>Tùy chỉnh ảnh &amp; bố cục</summary><div class="ending-advanced"><label>Vùng lấy hình<select id="ending-mask-mode"><option value="auto">Tự động</option><option value="dark">Vùng tối · nền sáng</option><option value="light">Vùng sáng · nền tối</option><option value="alpha">Phần không trong suốt</option></select></label><label>Mã bố cục<input id="ending-seed" value="thoi-khac-01" maxlength="80"></label></div></details>
     </section>
-
-    <details class="panel snapshots-drawer" open>
+    <details id="moments-panel" class="panel snapshots-drawer">
       <summary>Khoảnh khắc <span id="snapshot-count">0 ảnh</span></summary>
       <div id="snapshots" class="snapshots"></div>
     </details>
@@ -55,4 +73,9 @@
 
 <dialog id="login-dialog"><form id="login-form"><h2>Mở bàn điều khiển</h2><label>Mã quản lý<input id="admin-pin" type="password" autocomplete="current-password" required></label><p id="login-error" role="alert"></p><div class="pair"><button type="button" id="cancel-login">Xem trước</button><button class="primary">Đăng nhập</button></div></form></dialog>
 <dialog id="rename-page-dialog"><form id="rename-page-form"><h2>Đổi tên trang</h2><label for="page-name">Tên trang<input id="page-name" maxlength="80" required data-admin></label><div class="pair"><button type="button" id="cancel-rename">Hủy</button><button class="primary" data-admin>Lưu tên</button></div></form></dialog>
+<dialog id="ending-preview-dialog" aria-labelledby="ending-preview-title">
+  <div class="ending-dialog-heading"><h2 id="ending-preview-title">Dấu Ấn</h2><button id="ending-preview-close">Đóng ×</button></div>
+  <div id="ending-preview-host"></div>
+  <div class="ending-dialog-footer"><div class="ending-playback"><button id="ending-preview-play" disabled>Chạy lại</button><button id="ending-preview-pause" disabled>Tạm dừng</button><span id="ending-preview-time"></span></div><span id="ending-preview-status" role="status">Chỉ xem thử · chưa phát lên LED</span></div>
+</dialog>
 </body></html>

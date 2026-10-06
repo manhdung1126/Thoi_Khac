@@ -62,6 +62,45 @@ async function waitState(page,predicate,timeout=30000){
 }
 async function usable(page,locator){await locator.waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#send-button').disabled);}
 
+test('Control Ending rehearsal pauses without changing pixels, resumes and replays from the beginning', {timeout:45000},async t=>{
+  const context=await browser.newContext({viewport:{width:1440,height:1000}});
+  t.after(()=>context.close());
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+'/control/');
+  await page.locator('#admin-pin').fill('2468');
+  await page.locator('#login-form').getByRole('button',{name:'Đăng nhập',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('#login-dialog').open);
+  const before=await state(page);
+  await page.locator('#ending-image').setInputFiles({name:'circle.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><circle cx="100" cy="100" r="70" fill="black"/></svg>')});
+  await page.waitForFunction(()=>!document.querySelector('#ending-preview-open').disabled);
+  await page.locator('#ending-preview-count').selectOption('27');
+  await page.locator('#ending-preview-open').click();
+  const readTime=async()=>parseFloat(await page.locator('#ending-preview-time').textContent());
+  const pixels=()=>page.locator('#ending-preview-host canvas').evaluate(c=>Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data).reduce((hash,value)=>Math.imul(hash^value,16777619)>>>0,2166136261));
+  await page.waitForFunction(()=>parseFloat(document.querySelector('#ending-preview-time').textContent)>.8);
+  await page.locator('#ending-preview-pause').click();
+  assert.equal(await page.locator('#ending-preview-pause').textContent(),'Tiếp tục');
+  const paused=await readTime(),digest=await pixels();
+  await page.waitForTimeout(350);
+  assert.equal(await readTime(),paused);assert.equal(await pixels(),digest);
+  await page.locator('#ending-preview-pause').click();
+  assert.equal(await page.locator('#ending-preview-pause').textContent(),'Tạm dừng');
+  await page.waitForFunction(time=>parseFloat(document.querySelector('#ending-preview-time').textContent)>time+.2,paused);
+  await page.locator('#ending-preview-pause').click();
+  assert.ok(await readTime()>paused);
+  await page.locator('#ending-preview-play').click();
+  assert.ok(await readTime()<.5);
+  assert.equal(await page.locator('#ending-preview-pause').textContent(),'Tạm dừng');
+  await page.locator('#ending-preview-close').click();
+  assert.equal(await page.locator('#ending-preview-dialog').evaluate(node=>node.open),false);
+  const after=await state(page);
+  assert.equal(after.ending,before.ending);
+  assert.equal(after.revision,before.revision);
+  assert.equal(after.current_page_id,before.current_page_id);
+  assert.deepEqual(errors,[]);
+});
+
 test('home → Draw; width, undo/redo, reload, failed send/retry → realtime Display and fullscreen shine', {timeout:45000},async t=>{
   const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:2});
   t.after(()=>context.close());const draw=await context.newPage(),display=await context.newPage(),errors=[];

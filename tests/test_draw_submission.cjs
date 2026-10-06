@@ -48,6 +48,7 @@ function drawingPage(responses, savedStorage, profile='') {
   vm.runInContext(fs.readFileSync('frontend/shared/metallic.js', 'utf8').replaceAll('export function', 'function').replaceAll('export const','const'), sandbox);
   vm.runInContext(fs.readFileSync('frontend/shared/led.js', 'utf8').replace(/^import .*\n/gm,'').replaceAll('export function', 'function').replaceAll('export const','const'), sandbox);
   vm.runInContext(fs.readFileSync('frontend/draw/pencil.js', 'utf8').replace(/^import .*\n/gm,'').replaceAll('export function', 'function'), sandbox);
+  vm.runInContext(fs.readFileSync('frontend/draw/submission.js', 'utf8').replace(/^import .*\n/gm,'').replaceAll('export function', 'function'), sandbox);
   vm.runInContext(fs.readFileSync('frontend/draw/app.js', 'utf8').replace(/^import .*\n/gm, ''), sandbox);
   element('#tool-panel').hidden = true;
   const draw = () => {

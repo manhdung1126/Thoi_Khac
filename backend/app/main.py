@@ -109,6 +109,14 @@ def page_by_id(state, page_id):
     return page
 
 
+def _activate_cell(page, cell, drawing_id):
+    if drawing_id not in cell["drawing_ids"]:
+        raise HTTPException(404, "Hình không còn trong danh sách của ô.")
+    cell["active"] = drawing_id
+    cell["shown_at"] = time.time()
+    led.sync_items(page)
+
+
 def add_item(state, drawing_id):
     led.assign(current_page(state), drawing_id, paused=state['settings']['paused'] or bool(state.get('ending')))
 
@@ -594,13 +602,10 @@ def create_app(storage_path=None):
             elif len(parts) == 4 and parts[0] == "pages" and parts[2] == "cells" and request.method == "PATCH":
                 if not parts[3].isdigit() or not 0 <= int(parts[3]) < 27:
                     raise HTTPException(422, "Ô không hợp lệ.")
-                cell = page_by_id(state, parts[1])["cells"][int(parts[3])]
+                page = page_by_id(state, parts[1])
+                cell = page["cells"][int(parts[3])]
                 drawing_id = identifier(body.get("drawing_id"))
-                if drawing_id not in cell["drawing_ids"]:
-                    raise HTTPException(404, "Hình không còn trong danh sách của ô.")
-                cell["active"] = drawing_id
-                cell["shown_at"] = time.time()
-                led.sync_items(page_by_id(state, parts[1]))
+                _activate_cell(page, cell, drawing_id)
             elif len(parts) == 4 and parts[0] == "pages" and parts[2] == "items" and request.method == "DELETE":
                 led.remove(page_by_id(state, parts[1]), identifier(parts[3]))
             elif operation == "items" and request.method == "POST":
@@ -614,11 +619,7 @@ def create_app(storage_path=None):
                 led.ensure_cells(page)
                 cell = page['cells'][int(parts[1])]
                 drawing_id = identifier(body.get('drawing_id'))
-                if drawing_id not in cell['drawing_ids']:
-                    raise HTTPException(404, 'Hình không còn trong danh sách của ô.')
-                cell['active'] = drawing_id
-                cell['shown_at'] = time.time()
-                led.sync_items(page)
+                _activate_cell(page, cell, drawing_id)
             elif len(parts) == 2 and parts[0] == "items":
                 drawing_id = identifier(parts[1])
                 page = current_page(state)

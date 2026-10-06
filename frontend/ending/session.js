@@ -72,6 +72,9 @@ export class EndingPresentation{
     }
   }
   play(){if(this.ready){this.preview.pause();this.preview.seek(0);this.preview.play();}}
+  isPlaying(){return this.preview.running;}
+  pause(){this.preview.pause();}
+  resume(){this.preview.play();}
   clear(){
     this.generation++;this.controller?.abort();clearInterval(this.heartbeat);clearTimeout(this.startTimer);
     this.preview.destroy();this.ready=false;this.loading=false;this.retryAt=0;this.key=null;this.host.hidden=true;this.onReady(false);

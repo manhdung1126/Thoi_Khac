@@ -35,8 +35,8 @@ export class EndingControl{
     this.$('ending-preview-dialog').addEventListener('close',()=>this.session.clear());
     this.$('ending-preview-play').onclick=()=>this.session.play();
     this.$('ending-preview-pause').onclick=()=>{
-      if(this.session.preview.running)this.session.preview.pause();else this.session.preview.play();
-      this.$('ending-preview-pause').textContent=this.session.preview.running?'Tạm dừng':'Tiếp tục';
+      if(this.session.isPlaying())this.session.pause();else this.session.resume();
+      this.$('ending-preview-pause').textContent=this.session.isPlaying()?'Tạm dừng':'Tiếp tục';
     };
   }
   async upload(){

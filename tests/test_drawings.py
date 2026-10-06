@@ -225,6 +225,42 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(self.client.delete(f"/api/pages/{original}", headers=self.auth).status_code, 409)
         self.assertEqual(self.client.delete(f"/api/pages/{uuid4().hex}", headers=self.auth).status_code, 404)
 
+    def test_both_cell_activation_routes_preserve_membership_clock_and_page(self):
+        first, second = self.upload().json()['id'], self.upload('blue').json()['id']
+        live = self.client.get('/api/state').json()['current_page_id']
+        state = self.change('/api/pages')
+        other = next(page['id'] for page in state['pages'] if page['id'] != live)
+        for page_id in (live, other):
+            for drawing_id in (first, second):
+                self.change(f'/api/pages/{page_id}/items', drawing_id=drawing_id, cell_id=4)
+        for path, target in ((f'/api/pages/{other}/cells/4', other), ('/api/cells/4', live)):
+            with self.subTest(path=path):
+                before = self.client.get('/api/state').json()
+                clock = before['server_time'] + 1
+                with patch('backend.app.main.time.time', return_value=clock):
+                    after = self.change(path, 'patch', drawing_id=first)
+                self.assertEqual(after['revision'], before['revision'] + 1)
+                self.assertEqual(after['current_page_id'], live)
+                for old, new in zip(before['pages'], after['pages']):
+                    if new['id'] != target:
+                        self.assertEqual(new, old)
+                    else:
+                        self.assertEqual(new['cells'][4]['drawing_ids'], old['cells'][4]['drawing_ids'])
+                        self.assertEqual(new['cells'][4]['active'], first)
+                        self.assertEqual(new['cells'][4]['shown_at'], clock)
+                        self.assertEqual(next(item['drawing_id'] for item in new['items'] if item['cell_id'] == 4), first)
+                invalid = self.client.patch(path, headers=self.auth, json={'drawing_id': uuid4().hex})
+                self.assertEqual(invalid.status_code, 404)
+                self.assertEqual(invalid.json()['detail'], 'Hình không còn trong danh sách của ô.')
+                self.assertEqual(self.client.get('/api/state').json()['revision'], after['revision'])
+        for path in (f'/api/pages/{uuid4().hex}/cells/27', '/api/cells/27'):
+            invalid = self.client.patch(path, headers=self.auth, json={'drawing_id': 'invalid'})
+            self.assertEqual(invalid.status_code, 422)
+            self.assertEqual(invalid.json()['detail'], 'Ô không hợp lệ.')
+        invalid = self.client.patch(f'/api/pages/{uuid4().hex}/cells/4', headers=self.auth, json={'drawing_id': 'invalid'})
+        self.assertEqual(invalid.status_code, 404)
+        self.assertEqual(invalid.json()['detail'], 'Không tìm thấy trang.')
+
     def test_editing_selected_page_does_not_change_live_page(self):
         drawing = self.upload().json()
         live = self.client.get("/api/state").json()["current_page_id"]

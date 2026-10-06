@@ -1,7 +1,7 @@
 import {paintStroke, samplePoint} from './pencil.js?v=20261006-pressure-cache';
 import {MONO_MATERIAL} from '../shared/monoline.js?v=20261006-pressure-cache';
 import {LED, MONO_LED_WIDTHS, monoDrawWidth} from '../shared/led.js?v=20261006-pressure-cache';
-import {GRAPHITE_MATERIAL} from '../shared/graphite.js';
+import {submissionPayload} from './submission.js';
 
 const $=selector=>document.querySelector(selector);
 const canvas=$('#drawing-canvas'),logicalSize=LED.sourceSize;
@@ -99,13 +99,7 @@ $('#send-button').addEventListener('click',async()=>{
   if(busy||!hasDrawing)return;busy=true;toolPanel(false);updateButtons();status('Đang khắc…','',0);
   try{
     const form=new FormData();form.append('submission_id',submissionId);
-    const vectors=strokes.map(stroke=>{
-      const material=stroke.erase?null:stroke.material===GRAPHITE_MATERIAL?GRAPHITE_MATERIAL:MONO_MATERIAL;
-      return {erase:Boolean(stroke.erase),...(material?{width:stroke.ledWidth,material,...(material===GRAPHITE_MATERIAL?{seed:stroke.seed}:{})}:{}),
-        // Unsaved solid drafts adopt the shared palette without losing their alpha 1.
-        points:stroke.points.map(p=>material?[p.x,p.y,stroke.material===material?p.p??.55:1]:[p.x,p.y])};
-    });
-    form.append('strokes',JSON.stringify({version:2,profile:'led-2px',strokes:vectors}));
+    form.append('strokes',JSON.stringify(submissionPayload(strokes)));
     const data=await request('/api/drawings',{method:'POST',body:form});if(typeof data.id!=='string'||!data.image_path)throw new Error('Chưa nhận được xác nhận lưu hình. Hãy thử gửi lại.');
     strokes=[];undo=[];redo=[];active=null;erasing=false;render();selectPen();changed();status('Đã khắc vào Thời Khắc','success',3200);
   }catch(error){status('Chưa thể khắc. Thử lại.','error',0);$('#upload-status').title=error.message;}finally{busy=false;updateButtons();}

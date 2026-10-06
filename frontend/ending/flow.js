@@ -7,8 +7,8 @@ export function curlField(x,y,time,phases){
     -(.78*5.8/6.4*Math.cos(a)*Math.sin(b)-.22*10.3/9.1*Math.sin(c)*Math.sin(d))];
 }
 
-const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
-const smooth=v=>{const p=clamp(v);return p*p*p*(p*(p*6-15)+10);};
+export const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+export const smooth=v=>{const p=clamp(v);return p*p*p*(p*(p*6-15)+10);};
 function capped(x,y,max){const scale=Math.min(1,max/(Math.hypot(x,y)||1));return [x*scale,y*scale];}
 
 export function hermite(a,va,b,vb,p,duration){
@@ -89,10 +89,6 @@ export function simulateCloud(plans,field,aspect,c){
     }
   }
   return particles.map(({samples,settleAt})=>({samples,hz,settleAt}));
-}
-
-export function simulateFlow(plan,field,aspect,c){
-  return simulateCloud([plan],field,aspect,c)[0];
 }
 
 export function sampleFlow(plan,time){

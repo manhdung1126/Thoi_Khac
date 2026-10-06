@@ -171,3 +171,36 @@ chạy theo thời gian thật, không tăng tốc đồng hồ để lấy kế
 - Toàn bộ baseline: **92/92 PASS** với `PLAYWRIGHT_CHANNEL=chrome npm test`.
   Kiểm tra cú pháp Python và `git diff --check` PASS; server đang chạy trả health OK.
   Lint/type checking/build vẫn chưa được cấu hình, không tuyên bố các gate này PASS.
+
+## Cleanup có kiểm chứng (2026-10-06)
+
+Đã chạy `PLAYWRIGHT_CHANNEL=chrome npm test` sau từng pha; cả năm lượt đều
+**92/92 PASS** (41 unit JS, 42 integration Python, 9 E2E). Không xóa, sửa kỳ vọng
+hay bỏ qua test. Không đổi backend, route, auth, schema, submission hoặc giao diện.
+
+| Pha | Thay đổi | Verification |
+| --- | --- | --- |
+| 1 — rủi ro thấp | Không thấy import thừa/debug/backup đủ bằng chứng; không xóa cưỡng ép | 92/92 PASS |
+| 2 — dead code | Bỏ `simulateFlow`, alias `previewPhase`, `LEDScene.select`; bỏ import `motionPhase` chỉ phục vụ alias | 92/92 PASS |
+| 3 — asset | Xóa `frontend/display/assets/led-dark-gold-demo.svg` | 92/92 PASS |
+| 4 — dependency | FastAPI/Uvicorn, Pillow, Playwright đều cần; giữ manifest và lockfile | 92/92 PASS |
+| 5 — duplication | Dùng chung `clamp`/`smooth` từ `flow.js`, giữ re-export qua `motion.js` | 92/92 PASS |
+
+Trước khi xóa đã kiểm tra source, HTML/CSS, import động của test, tài liệu,
+tooling, route tĩnh và callback. Không có consumer của các symbol đã bỏ hoặc
+tham chiếu tới nền demo; nền thực lấy từ `LED.background`, chọn ô qua `Stage.selectCell`.
+
+- **SAFE_TO_REMOVE:** ba symbol nội bộ nêu trên và nền demo cũ; đã xóa.
+- **KEEP:** nền cuộn sớ/logo đang dùng, graphite cho dữ liệu cũ, sinh nét mẫu cho
+  rehearsal, `__init__.py`, `run.py`, test runner, skills/config/lockfile và mọi storage.
+- **LIKELY_UNUSED:** `ENDING_MOTION.textAt`; giữ vì là trường cấu hình xuất ra,
+  không thay hợp đồng cấu hình trong lượt cleanup này.
+- **UNKNOWN:** nhu cầu truy cập ngoài module đối với `LEDScene.grid` và
+  `EndingPreview.artworks`; giữ các thuộc tính này.
+
+Không gộp `Draw.request` với `api`: nội dung lỗi, auth và kiểm tra response khác nhau.
+Không gộp thuật toán JS/Python: hai runtime cần giữ khả năng đọc dữ liệu và xuất SVG.
+Giảm ròng **45 dòng mã/asset**, chưa tính phần tài liệu này; 1 asset xóa có thể khôi
+phục từ Git. Không xóa tác phẩm, bản nháp, file backup dữ liệu hoặc cache môi trường.
+`npm ls --depth=0`, `pip check`, cú pháp 30 file JS/11 file Python và diff check PASS.
+Lint/type check/production build vẫn **NOT CONFIGURED**, không phải các gate PASS.

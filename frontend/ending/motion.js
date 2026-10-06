@@ -1,10 +1,9 @@
 import {LED,cellGeometry} from '../shared/led.js';
 import {hash,random} from './composition.js';
 import {ENDING_MOTION as defaults,ENDING_VISUAL} from './config.js';
-import {simulateCloud,sampleFlow} from './flow.js';
+import {simulateCloud,sampleFlow,clamp,smooth} from './flow.js';
 
-export const clamp=(v,min=0,max=1)=>Math.max(min,Math.min(max,v));
-export const smooth=v=>{const p=clamp(v);return p*p*p*(p*(p*6-15)+10);};
+export {clamp,smooth} from './flow.js';
 const lerp=(a,b,p)=>a+(b-a)*p;
 
 // Phase names remain available for diagnostics only, not force switches.

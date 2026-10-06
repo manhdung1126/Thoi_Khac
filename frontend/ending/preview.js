@@ -1,9 +1,8 @@
 import {ENDING_MOTION} from './config.js';
-import {planMotion,evaluateMotion,motionPhase,breathAt,clamp,smooth} from './motion.js';
+import {planMotion,evaluateMotion,breathAt,clamp,smooth} from './motion.js';
 import {paintStrokeShine} from './shine.js';
 
 export const PREVIEW_SECONDS=ENDING_MOTION.duration;
-export const previewPhase=motionPhase;
 
 // Local, seekable rehearsal. Plans and assets are prepared once.
 // Canvas evaluates absolute time; no physics integration or API writes.

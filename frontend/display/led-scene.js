@@ -113,7 +113,6 @@ export class LEDScene{
     }
     this.shineFrame=requestAnimationFrame(next=>this.animateShine(next));
   }
-  select(id){this.nodes.forEach(entry=>entry.node.classList.toggle('selected',Boolean(id)&&entry.id===id));}
   async capture(value=this.state){
     const state=structuredClone(value);if(!state)throw new Error('Chưa tải được cảnh LED.');
     await this.background.decode();

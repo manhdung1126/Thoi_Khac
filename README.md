@@ -72,11 +72,17 @@ Dừng server rồi sao lưu toàn bộ `backend/storage/` trước khi chuyển
 ## Kiểm thử
 
 ```sh
-.venv/bin/python -m unittest discover -s tests -v
-node --test tests/*.cjs
+npm ci
+npx playwright install chromium
+npm test
 ```
 
-Kiểm thử API dùng thư mục tạm và chỉ bảo vệ luồng chức năng đang chốt.
+Nếu đã có Google Chrome: dùng `PLAYWRIGHT_CHANNEL=chrome npm test`, không cần tải Chromium.
+Suite chạy unit → API integration → browser smoke, dùng dữ liệu tạm và server riêng,
+không tác động kho triển lãm. Xem phạm vi bảo vệ và giới hạn tại [docs/TESTING.md](docs/TESTING.md).
+Test lỗi ghi đĩa bảo vệ rollback upload: lỗi ghi SVG/vector/state không để lại
+file của lần gửi bị từ chối, giữ nguyên dữ liệu cũ và cho phép gửi lại không trùng.
+Có thể chạy E2E riêng bằng `PLAYWRIGHT_CHANNEL=chrome npm run test:smoke`.
 
 ## Chuẩn bị bản chính
 

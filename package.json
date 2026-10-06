@@ -1,0 +1,14 @@
+{
+  "name": "cloud-of-strokes-regression",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": ".venv/bin/python tests/run_regression.py",
+    "test:core": ".venv/bin/python tests/run_regression.py --layer core",
+    "test:unit": "node --test tests/*.cjs",
+    "test:smoke": "node --test tests/browser/*.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

@@ -25,3 +25,6 @@ backend/storage/admin-secret*
 .ruff_cache/
 coverage/
 *.log
+
+# Browser tests only; no generated files belong in the production frontend.
+node_modules/

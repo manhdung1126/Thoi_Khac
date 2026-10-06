@@ -47,3 +47,16 @@ test('JS and server SVG share the exact grain definition',async()=>{
     'import json; from backend.app.led import graphite_grain; print(json.dumps([graphite_grain(s) for s in [0,17,255]]))'],{encoding:'utf8'}));
   assert.deepEqual(seeds.map(graphiteGrain),python);
 });
+test('pointer coordinates and velocity density are independent of canvas display size and stay inside the paper',async()=>{
+  const {samplePoint}=await import('../frontend/draw/pencil.js');
+  for(const pointerType of ['mouse','touch','pen']){
+    const sample=size=>samplePoint({pointerType,pressure:.7,clientX:20+size/2,clientY:30+size/4,timeStamp:20},
+      {left:20,top:30,width:size,height:size},{x:340,y:180,t:0,p:.55});
+    assert.deepEqual(sample(720),sample(360));
+    assert.deepEqual([sample(360).x,sample(360).y],[360,180]);
+  }
+  const rect={left:20,top:30,width:360,height:360};
+  const outside=(x,y)=>samplePoint({pointerType:'mouse',clientX:x,clientY:y,timeStamp:0},rect);
+  assert.deepEqual([outside(-100,-100).x,outside(-100,-100).y],[0,0]);
+  assert.deepEqual([outside(1000,1000).x,outside(1000,1000).y],[720,720]);
+});

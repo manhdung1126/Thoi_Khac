@@ -238,14 +238,23 @@ class Store:
                     raise HTTPException(409, "Mã lần gửi đã dùng cho nội dung khác.")
                 return copy.deepcopy(self.drawing(self.state, previous["id"], active=False)), False
             drawing_id = uuid4().hex
-            atomic_write(self.directory / "drawings" / f"{drawing_id}.svg", led.svg_document(vectors))
-            atomic_write(self.directory / 'vectors' / f'{drawing_id}.json', vector_bytes)
+            image_path = self.directory / "drawings" / f"{drawing_id}.svg"
+            vector_path = self.directory / 'vectors' / f'{drawing_id}.json'
             drawing = {"id": drawing_id, "image_path": f"/api/drawings/{drawing_id}", "vector_path": f'/api/strokes/{drawing_id}', "created_at": time.time(), "width": 720, "height": 720, "deleted": False, "favorite": False}
             def save(state):
                 state["drawings"].append(drawing)
                 state["submissions"][submission_id] = {"id": drawing_id, "digest": digest}
                 add_item(state, drawing_id)
-            self.mutate(save)
+            try:
+                atomic_write(image_path, led.svg_document(vectors))
+                atomic_write(vector_path, vector_bytes)
+                self.mutate(save)
+            except Exception:
+                for path in (image_path, vector_path):
+                    # Attempt both cleanups without masking the original storage error.
+                    with suppress(OSError):
+                        path.unlink(missing_ok=True)
+                raise
             return drawing, True
 
     def rotate(self):

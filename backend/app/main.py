@@ -111,12 +111,68 @@ def page_by_id(state, page_id):
     return page
 
 
+def _cell_index(value):
+    if not value.isdigit() or not 0 <= int(value) < 27:
+        raise HTTPException(422, "Ô không hợp lệ.")
+    return int(value)
+
+
 def _activate_cell(page, cell, drawing_id):
     if drawing_id not in cell["drawing_ids"]:
         raise HTTPException(404, "Hình không còn trong danh sách của ô.")
     cell["active"] = drawing_id
     cell["shown_at"] = time.time()
     led.sync_items(page)
+
+
+def _update_settings(settings, changes):
+    for key, value in changes.items():
+        if key == "rotation_seconds":
+            if type(value) is not int or not 2 <= value <= 120:
+                raise HTTPException(422, "Chu kỳ từ 2 đến 120 giây.")
+        elif key == "paused":
+            if type(value) is not bool:
+                raise HTTPException(422, "Giá trị tạm dừng không hợp lệ.")
+        elif key == "led_fade":
+            if type(value) not in (int, float) or not math.isfinite(value) or not .2 <= value <= 1.8:
+                raise HTTPException(422, "Thời gian chuyển ảnh phải từ 0,2 đến 1,8 giây.")
+        else:
+            raise HTTPException(422, "Thiết lập không được hỗ trợ.")
+        settings[key] = value
+
+
+def _rename_page(state, page_id, name):
+    """Caller validates the UUID; invalid names precede missing-page errors."""
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+        raise HTTPException(422, "Tên trang cần từ 1 đến 80 ký tự.")
+    page = next((p for p in state["pages"] if p["id"] == page_id), None)
+    if page is None:
+        raise HTTPException(404, "Không tìm thấy trang.")
+    page["name"] = name.strip()
+    for moment in state["snapshots"]:
+        if moment.get("page_id") == page_id:
+            moment["name"] = page["name"]
+
+
+def _delete_page(state, page_id):
+    index = next((i for i, page in enumerate(state["pages"]) if page["id"] == page_id), None)
+    if index is None:
+        raise HTTPException(404, "Không tìm thấy trang.")
+    if len(state["pages"]) <= 1:
+        raise HTTPException(409, "Cần giữ ít nhất một trang trình chiếu.")
+    state["pages"].pop(index)
+    if state["current_page_id"] == page_id:
+        # Use the deleted live slot's successor, or its predecessor if it was last.
+        state["current_page_id"] = state["pages"][min(index, len(state["pages"]) - 1)]["id"]
+    for moment in state["snapshots"]:
+        if moment.get("page_id") == page_id:
+            moment.pop("page_id")
+
+
+def _archive_drawing(state, drawing):
+    drawing["deleted"] = True
+    for page in state["pages"]:
+        led.remove(page, drawing["id"])
 
 
 def add_item(state, drawing_id):
@@ -539,6 +595,7 @@ def create_app(storage_path=None):
 
     @app.api_route("/api/{operation:path}", methods=["POST", "PATCH", "DELETE"])
     async def control(operation: str, request: Request):
+        # Auth and JSON validation precede dispatch, including unknown actions.
         require_admin(request)
         body = await body_object(request) if request.method != "DELETE" else {}
         parts = operation.split("/")
@@ -553,79 +610,46 @@ def create_app(storage_path=None):
                 (parts[0] == "pages" and len(parts) == 2 and request.method == "DELETE" and parts[1] == active_ending["page_id"])):
                 raise HTTPException(409, "Quay lại Normal trước khi chuyển hoặc xóa trang đang Ending.")
             if operation == "settings" and request.method == "PATCH":
-                settings = state["settings"]
-                for key, value in body.items():
-                    if key == "rotation_seconds":
-                        if type(value) is not int or not 2 <= value <= 120:
-                            raise HTTPException(422, "Chu kỳ từ 2 đến 120 giây.")
-                    elif key == "paused":
-                        if type(value) is not bool:
-                            raise HTTPException(422, "Giá trị tạm dừng không hợp lệ.")
-                    elif key == "led_fade":
-                        if type(value) not in (int, float) or not math.isfinite(value) or not .2 <= value <= 1.8:
-                            raise HTTPException(422, "Thời gian chuyển ảnh phải từ 0,2 đến 1,8 giây.")
-                    else:
-                        raise HTTPException(422, "Thiết lập không được hỗ trợ.")
-                    settings[key] = value
+                _update_settings(state["settings"], body)
             elif operation == "pages" and request.method == "POST":
                 active_page = state["current_page_id"]
                 new_page(state)
                 state["current_page_id"] = active_page
             elif len(parts) == 2 and parts[0] == "pages" and request.method == "DELETE":
                 page_id = identifier(parts[1])
-                index = next((i for i, page in enumerate(state["pages"]) if page["id"] == page_id), None)
-                if index is None:
-                    raise HTTPException(404, "Không tìm thấy trang.")
-                if len(state["pages"]) <= 1:
-                    raise HTTPException(409, "Cần giữ ít nhất một trang trình chiếu.")
-                state["pages"].pop(index)
-                if state["current_page_id"] == page_id:
-                    state["current_page_id"] = state["pages"][min(index, len(state["pages"]) - 1)]["id"]
-                for moment in state["snapshots"]:
-                    if moment.get("page_id") == page_id:
-                        moment.pop("page_id")
+                _delete_page(state, page_id)
             elif len(parts) == 2 and parts[0] == "pages" and request.method == "PATCH":
                 page_id = identifier(parts[1])
-                name = body.get("name")
-                if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
-                    raise HTTPException(422, "Tên trang cần từ 1 đến 80 ký tự.")
-                page = next((p for p in state["pages"] if p["id"] == page_id), None)
-                if page is None:
-                    raise HTTPException(404, "Không tìm thấy trang.")
-                page["name"] = name.strip()
-                for moment in state["snapshots"]:
-                    if moment.get("page_id") == page_id:
-                        moment["name"] = page["name"]
+                _rename_page(state, page_id, body.get("name"))
             elif len(parts) == 3 and parts[0] == "pages" and parts[2] == "activate":
                 page_id = identifier(parts[1])
                 if not any(page["id"] == page_id for page in state["pages"]):
                     raise HTTPException(404, "Không tìm thấy trang.")
                 state["current_page_id"] = page_id
-            elif len(parts) == 3 and parts[0] == "pages" and parts[2] == "items" and request.method == "POST":
+            elif request.method == "POST" and (
+                operation == "items" or (len(parts) == 3 and parts[0] == "pages" and parts[2] == "items")
+            ):
+                # Both aliases validate the drawing before resolving their page.
                 drawing_id = identifier(body.get("drawing_id"))
                 store.drawing(state, drawing_id)
-                led.assign(page_by_id(state, parts[1]), drawing_id, body.get("cell_id"), state["settings"]["paused"])
-            elif len(parts) == 4 and parts[0] == "pages" and parts[2] == "cells" and request.method == "PATCH":
-                if not parts[3].isdigit() or not 0 <= int(parts[3]) < 27:
-                    raise HTTPException(422, "Ô không hợp lệ.")
-                page = page_by_id(state, parts[1])
-                cell = page["cells"][int(parts[3])]
+                page = page_by_id(state, parts[1]) if len(parts) == 3 else current_page(state)
+                led.assign(page, drawing_id, body.get("cell_id"), state["settings"]["paused"])
+            elif request.method == "PATCH" and (
+                (len(parts) == 4 and parts[0] == "pages" and parts[2] == "cells")
+                or (len(parts) == 2 and parts[0] == "cells")
+            ):
+                cell_index = _cell_index(parts[-1])
+                if len(parts) == 4:
+                    page = page_by_id(state, parts[1])
+                else:
+                    page = current_page(state)
+                    # Only the live alias repairs cells; explicit pages do not.
+                    led.ensure_cells(page)
+                cell = page["cells"][cell_index]
                 drawing_id = identifier(body.get("drawing_id"))
                 _activate_cell(page, cell, drawing_id)
             elif len(parts) == 4 and parts[0] == "pages" and parts[2] == "items" and request.method == "DELETE":
                 led.remove(page_by_id(state, parts[1]), identifier(parts[3]))
-            elif operation == "items" and request.method == "POST":
-                drawing_id = identifier(body.get("drawing_id"))
-                store.drawing(state, drawing_id)
-                led.assign(current_page(state), drawing_id, body.get("cell_id"), state["settings"]["paused"])
-            elif len(parts) == 2 and parts[0] == 'cells' and request.method == 'PATCH':
-                if not parts[1].isdigit() or not 0 <= int(parts[1]) < 27:
-                    raise HTTPException(422, 'Ô không hợp lệ.')
-                page = current_page(state)
-                led.ensure_cells(page)
-                cell = page['cells'][int(parts[1])]
-                drawing_id = identifier(body.get('drawing_id'))
-                _activate_cell(page, cell, drawing_id)
             elif len(parts) == 2 and parts[0] == "items":
                 drawing_id = identifier(parts[1])
                 page = current_page(state)
@@ -668,9 +692,7 @@ def create_app(storage_path=None):
                     state["submissions"] = {key: value for key, value in state["submissions"].items() if value.get("id") != drawing_id}
                     state["drawings"].remove(drawing)
                 elif len(parts) == 2 and request.method == "DELETE":
-                    drawing["deleted"] = True
-                    for page in state["pages"]:
-                        led.remove(page, drawing_id)
+                    _archive_drawing(state, drawing)
                 else:
                     raise HTTPException(404)
             elif len(parts) == 2 and parts[0] == "snapshots" and request.method == "DELETE":

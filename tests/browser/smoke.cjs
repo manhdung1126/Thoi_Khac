@@ -189,6 +189,37 @@ test('Control preserves focused and dirty cycle input and unfinished page-name e
   assert.deepEqual(errors,[]);
 });
 
+test('Control cycle save uses refreshed HTTP settings and releases its draft for later reconciliation', {timeout:30000},async t=>{
+  const {page,headers,signals,errors}=await contractControl(t);
+  const before=await state(page),selected=await page.locator('#page-select').inputValue();
+  const cycle=page.locator('#rotation-seconds');let mutationState;
+  await page.route(origin+'/api/settings',async route=>{
+    if(route.request().method()!=='PATCH')return route.continue();
+    const response=await route.fetch();assert.equal(response.status(),200);
+    mutationState=await response.json();
+    // Another operator commits before the first mutation response reaches Control.
+    const newer=await page.request.patch(origin+'/api/settings',{headers,data:{rotation_seconds:19}});
+    assert.equal(newer.status(),200);
+    await route.fulfill({response});
+  });
+  await cycle.fill('17');
+  await page.getByRole('button',{name:'Áp dụng',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#rotation-seconds').value==='19'&&!document.querySelector('#rotation-seconds').disabled);
+  assert.equal(mutationState.settings.rotation_seconds,17);
+  const refreshed=await state(page);
+  assert.equal(refreshed.settings.rotation_seconds,19);
+  assert.equal(refreshed.revision,before.revision+2);
+  assert.equal(refreshed.current_page_id,before.current_page_id);
+  assert.equal(await page.locator('#page-select').inputValue(),selected);
+  await page.unroute(origin+'/api/settings');
+  await page.locator('#stage-title').click();
+  const changed=await page.request.patch(origin+'/api/settings',{headers,data:{rotation_seconds:11}});
+  assert.equal(changed.status(),200);
+  signals.socket.send(JSON.stringify({type:'state_changed'}));
+  await page.waitForFunction(()=>document.querySelector('#rotation-seconds').value==='11');
+  assert.deepEqual(errors,[]);
+});
+
 test('Control keeps authoritative refreshed state when a delayed mutation response is older', {timeout:30000},async t=>{
   const context=await browser.newContext();t.after(()=>context.close());
   const page=await context.newPage(),errors=[];

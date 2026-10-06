@@ -3,7 +3,10 @@ import { Stage } from "./stage.js?v=20261006-exhibition";
 import {EndingControl} from './ending.js';
 
 const $ = selector => document.querySelector(selector);
-let state, busy = false, libraryView = "active", selectedCell = 0, selectedPageId, notificationTimer;
+// Server-owned pages, drawings, cells, Ending, live page and revision from HTTP.
+let state;
+// Local Control UI; selection and in-progress inputs are not server state.
+let busy = false, libraryView = "active", selectedCell = 0, selectedPageId, notificationTimer;
 
 function notice(message, error = false) {
   const node = $("#notice");
@@ -36,13 +39,14 @@ async function mutate(path, method = "POST", body = {}, message = "Đã cập nh
   busy = true; access(); notice("Đang lưu thay đổi…");
   try {
     await api(path, { method, body: method === "DELETE" ? undefined : body, auth: true });
-    const result = await subscription.refresh(); notice(message); return result;
+    // The subscription applies HTTP state before refresh resolves.
+    const refreshedState = await subscription.refresh(); notice(message); return refreshedState;
   } catch (error) {
     notice(error.message, true);
     if (error.status === 401) openLogin();
     if (state) stage.render(state);
   } finally {
-    busy = false; access(); renderCells(); renderLibrary();
+    busy = false; access();
   }
 }
 
@@ -56,6 +60,7 @@ function makeButton(text, action, { disabled = false, danger = false } = {}) {
   return button;
 }
 
+// The selected preview page is not necessarily the server's live page.
 const currentPage = () => state?.pages.find(page => page.id === selectedPageId);
 
 function renderCells() {
@@ -162,12 +167,22 @@ function renderSnapshots() {
   if (!state.snapshots.length) host.innerHTML = '<p class="empty">Chưa có khoảnh khắc nào.</p>';
 }
 
-function render(value) {
+function applyAuthoritativeState(value) {
   state = value;
+  renderControl();
+}
+
+function renderRotationSeconds() {
+  const input = $("#rotation-seconds");
+  if (document.activeElement !== input && !input.dataset.dirty) input.value = state.settings.rotation_seconds;
+}
+
+function renderControl() {
+  const value = state;
   if (!value.pages.some(page => page.id === selectedPageId)) selectedPageId = value.current_page_id;
   stage.render({ ...value, current_page_id: selectedPageId });
   const page = currentPage();
-  if (document.activeElement !== $("#rotation-seconds") && !$("#rotation-seconds").dataset.dirty) $("#rotation-seconds").value = value.settings.rotation_seconds;
+  renderRotationSeconds();
   const visibleCount = (page?.cells || []).filter(cell => cell.active).length;
   $("#stage-count").textContent = `${page?.name || "Trang"} · ${visibleCount} hình · ${selectedPageId === value.current_page_id ? "đang chiếu" : "đang xem trước"}`;
   $("#pause-button").textContent = value.settings.paused ? "Tiếp tục" : "Tạm dừng";
@@ -189,7 +204,7 @@ function render(value) {
   renderCells(); renderLibrary(); renderSnapshots(); endingControl.render(value);access();
 }
 
-const subscription = subscribeState(render, status => { $("#connection-status").textContent = `${status.connected ? "●" : "○"} ${status.message}`; $("#connection-status").classList.toggle("connected", status.connected); });
+const subscription = subscribeState(applyAuthoritativeState, status => { $("#connection-status").textContent = `${status.connected ? "●" : "○"} ${status.message}`; $("#connection-status").classList.toggle("connected", status.connected); });
 
 $("#library-search").addEventListener("input", renderLibrary);
 $("#only-visible").addEventListener("change", renderLibrary);
@@ -211,26 +226,26 @@ $("#show-active").addEventListener("click", () => showLibraryFolder("active"));
 $("#show-favorites").addEventListener("click", () => showLibraryFolder("favorites"));
 $("#show-trash").addEventListener("click", () => showLibraryFolder("trash"));
 $("#pause-button").addEventListener("click", () => mutate("/api/settings", "PATCH", { paused: !state.settings.paused }, state.settings.paused ? "Đã tiếp tục luân phiên." : "Đã tạm dừng luân phiên."));
-$("#page-select").addEventListener("change", event => { selectedPageId=event.target.value; selectedCell=0; render(state); });
+$("#page-select").addEventListener("change", event => { selectedPageId=event.target.value; selectedCell=0; renderControl(); });
 $("#show-page").addEventListener("click", () => mutate(`/api/pages/${selectedPageId}/activate`, "POST", {}, "Đã chiếu trang được chọn."));
-$("#new-page").addEventListener("click", async () => { const known=new Set(state.pages.map(page=>page.id)); const result=await mutate("/api/pages", "POST", {}, "Đã tạo trang mới để chỉnh sửa."); if(result){selectedPageId=result.pages.find(page=>!known.has(page.id))?.id||result.current_page_id;selectedCell=0;render(result);} });
+$("#new-page").addEventListener("click", async () => { const known=new Set(state.pages.map(page=>page.id)); const result=await mutate("/api/pages", "POST", {}, "Đã tạo trang mới để chỉnh sửa."); if(result){selectedPageId=result.pages.find(page=>!known.has(page.id))?.id||result.current_page_id;selectedCell=0;renderControl();} });
 $("#rename-page").addEventListener("click", () => { const page=currentPage(); $("#page-name").value=page?.name||""; $("#page-name").dataset.pageId=page?.id||""; $("#rename-page-dialog").showModal(); $("#page-name").select(); });
 $("#cancel-rename").addEventListener("click", () => $("#rename-page-dialog").close());
-$("#delete-page").addEventListener("click", async () => { const page=currentPage(); if(page&&state.pages.length>1&&confirm(`Xóa trang “${page.name}”? Bố cục của trang này sẽ bị xóa.`)){const index=state.pages.indexOf(page),result=await mutate(`/api/pages/${page.id}`, "DELETE", {}, "Đã xóa trang.");if(result){selectedPageId=result.pages[Math.min(index,result.pages.length-1)].id;selectedCell=0;render(result);}} });
+$("#delete-page").addEventListener("click", async () => { const page=currentPage(); if(page&&state.pages.length>1&&confirm(`Xóa trang “${page.name}”? Bố cục của trang này sẽ bị xóa.`)){const index=state.pages.indexOf(page),result=await mutate(`/api/pages/${page.id}`, "DELETE", {}, "Đã xóa trang.");if(result){selectedPageId=result.pages[Math.min(index,result.pages.length-1)].id;selectedCell=0;renderControl();}} });
 $("#rotation-seconds").addEventListener("input", () => { $("#rotation-seconds").dataset.dirty = "true"; });
 $("#rename-page-form").addEventListener("submit", async event => {
   event.preventDefault();
   const input = $("#page-name"), name = input.value.trim();
   if (!name) { notice("Hãy nhập tên trang.", true); return; }
   const result = await mutate(`/api/pages/${input.dataset.pageId}`, "PATCH", { name }, "Đã đổi tên trang.");
-  if (result) { $("#rename-page-dialog").close(); render(result); }
+  if (result) $("#rename-page-dialog").close();
 });
 $("#rotation-form").addEventListener("submit", async event => {
   event.preventDefault();
   const input = $("#rotation-seconds"), seconds = Number(input.value);
   if (!Number.isInteger(seconds) || seconds < 2 || seconds > 120) { notice("Nhập số giây từ 2 đến 120.", true); return; }
   const result = await mutate("/api/settings", "PATCH", { rotation_seconds: seconds }, `Đã đặt luân phiên mỗi ${seconds} giây.`);
-  if (result) { delete input.dataset.dirty; render(result); }
+  if (result) { delete input.dataset.dirty; renderRotationSeconds(); }
 });
 $("#snapshot-button").addEventListener("click", async () => {
   if (busy) return; if (!getToken()) { openLogin(); return; }

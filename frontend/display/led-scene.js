@@ -4,7 +4,7 @@ import {paintMetallicMask} from '../shared/metallic.js?v=20261006-exhibition';
 
 export class LEDScene{
   constructor(host,{onError=()=>{},onSelect=()=>{},grid=false,animateMetal=!matchMedia('(prefers-reduced-motion: reduce)').matches}={}){
-    this.host=host;this.onError=onError;this.onSelect=onSelect;this.grid=grid;this.cache=new Map();this.nodes=[];this.destroyed=false;this.lastShine=0;
+    this.host=host;this.onError=onError;this.onSelect=onSelect;this.cache=new Map();this.nodes=[];this.destroyed=false;this.lastShine=0;
     host.classList.add('led-viewport');
     host.setAttribute('aria-label','Màn LED 1536 × 768 · 27 ô nét vẽ');
     host.innerHTML='<div class="led-scene"><img class="led-background" alt=""/><div class="led-cells"></div></div>';
@@ -31,6 +31,12 @@ export class LEDScene{
     document.addEventListener('visibilitychange',this.resumeShine);
     document.addEventListener('fullscreenchange',this.resumeShine);
     this.resumeShine();
+  }
+  selectCell(index) {
+    this.nodes.forEach((entry, i) => {
+      entry.node.classList.toggle('selected', i === index);
+      entry.node.setAttribute('aria-pressed', String(i === index));
+    });
   }
   async asset(drawing){
     const key=drawing.id;

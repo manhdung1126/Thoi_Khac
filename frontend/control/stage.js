@@ -27,10 +27,7 @@ export class Stage {
     this.led.animateMetal=!active;this.led.resumeShine();
   }
   selectCell(index) {
-    this.led.nodes.forEach((entry, i) => {
-      entry.node.classList.toggle('selected', i === index);
-      entry.node.setAttribute('aria-pressed', String(i === index));
-    });
+    this.led.selectCell(index);
   }
   capture(state) { return this.led.capture(state); }
   destroy() { this.led.destroy();this.ending.destroy(); }

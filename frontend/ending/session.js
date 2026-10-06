@@ -1,4 +1,4 @@
-import {ENDING_CONFIG} from './config.js';
+import {ENDING_CONFIG,ENDING_MOTION} from './config.js';
 import {compose} from './composition.js';
 import {loadArtwork} from './assets.js';
 import {EndingPreview} from './preview.js';
@@ -15,7 +15,7 @@ export class EndingPresentation{
     this.frame=host.querySelector('.ending-frame');this.canvas=host.querySelector('canvas');this.text=host.querySelector('p');
     host.querySelector('img').src=apiUrl(LED.background);this.text.textContent=ENDING_CONFIG.finalText;
     this.preview=new EndingPreview(this.canvas,(time,running)=>{
-      this.text.hidden=!ENDING_CONFIG.finalText||time<19.2;onTime(time,running);
+      this.text.hidden=!ENDING_CONFIG.finalText||time<ENDING_MOTION.textAt;onTime(time,running);
     });
     this.resize=new ResizeObserver(([entry])=>{const {width,height}=entry.contentRect;this.frame.style.transform='translate(-50%,-50%) scale('+Math.min(width/1536,height/768)+')';});
     this.resize.observe(host);

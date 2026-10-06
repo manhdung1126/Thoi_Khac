@@ -12,7 +12,7 @@ export class EndingPreview{
     this.time=0;this.running=false;this.completed=false;
   }
   prepare(layout,artworks,cells=[]){
-    this.pause();this.layout=layout;this.artworks=artworks;
+    this.pause();this.layout=layout;
     this.motion=planMotion(layout,cells);
     this.canvas.width=layout.viewport.width;this.canvas.height=layout.viewport.height;
     const queues=Array.from({length:27},(_,i)=>this.motion.plans.filter(p=>p.cell===i));
@@ -71,7 +71,7 @@ export class EndingPreview{
     if(!this.hasGraphite)paintStrokeShine(ctx,w,h,t);
   }
   destroy(){
-    this.pause();this.layout=null;this.artworks=null;this.entries=[];this.motion=null;
+    this.pause();this.layout=null;this.entries=[];this.motion=null;
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
   }
 }

@@ -211,6 +211,10 @@ class FileStateContracts(unittest.TestCase):
                 self.assertEqual(failed.status_code, 507)
                 self.assert_recovery(before, files)
 
+                self.assert_favorite_retry(drawing, before, files)
+                self.client.patch(f"/api/drawings/{drawing['id']}/favorite",
+                    json={'favorite': False}, headers=self.auth).raise_for_status()
+
     def test_favorite_commit_failure_retains_export_without_flag_contract_unclear(self):
         # Characterization only: export copies intentionally survive original purge.
         # Whether a failed favorite operation may also retain one needs a design decision.
@@ -712,3 +716,109 @@ class FileStateContracts(unittest.TestCase):
         response = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
         self.assertEqual(response.status_code, 200)
         self.assert_snapshot_deleted(snapshot, before, files)
+
+    def assert_favorite_retry(self, drawing, before, files):
+        drawing_id = drawing['id']
+        response = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+            json={'favorite': True}, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        after, actual = self.state(), self.files()
+        self.assertEqual(after, {**before, 'revision': before['revision'] + 1,
+            'drawings': [{**d, 'favorite': True} if d['id'] == drawing_id else d for d in before['drawings']]})
+        exported = Path('favorites') / f'{drawing_id}.svg'
+        expected = {p: data for p, data in files.items() if p != Path('state.json')}
+        expected[exported] = files[Path('drawings') / f'{drawing_id}.svg']
+        self.assertEqual({p: data for p, data in actual.items() if p != Path('state.json')}, expected)
+        self.assert_recovery(after, actual)
+        self.assertEqual(self.client.get(f'/api/favorites/{drawing_id}').content, expected[exported])
+
+    def test_favorite_partial_export_and_flush_failure_preserve_state_other_exports_and_retry(self):
+        drawing = self.drawings[0]
+        real_fdopen = os.fdopen
+
+        @contextmanager
+        def partial_export(descriptor, mode):
+            with real_fdopen(descriptor, mode) as stream:
+                proxy = Mock(wraps=stream)
+
+                def write_some(data):
+                    stream.write(data[:12])
+                    raise OSError(errno.ENOSPC, 'partial favorite export rejected')
+
+                proxy.write.side_effect = write_some
+                yield proxy
+
+        for boundary in ['partial_write', 'fsync']:
+            with self.subTest(boundary=boundary):
+                before, files = self.state(), self.files()
+                fault = (patch('os.fdopen', side_effect=partial_export) if boundary == 'partial_write'
+                         else patch('os.fsync', side_effect=OSError(errno.ENOSPC, 'favorite flush rejected')))
+                with fault:
+                    failed = self.client.patch(f"/api/drawings/{drawing['id']}/favorite",
+                        json={'favorite': True}, headers=self.auth)
+                self.assertEqual(failed.status_code, 507)
+                self.assert_recovery(before, files)
+                self.assert_favorite_retry(drawing, before, files)
+                self.client.patch(f"/api/drawings/{drawing['id']}/favorite",
+                    json={'favorite': False}, headers=self.auth).raise_for_status()
+
+    def test_favorite_serialization_failure_keeps_committed_state_and_retry_without_deciding_export_policy(self):
+        drawing = self.drawings[0]
+        drawing_id = drawing['id']
+        before, files = self.state(), self.files()
+        exported = Path('favorites') / f'{drawing_id}.svg'
+        real_dumps = json.dumps
+
+        def fail_state(value, *args, **kwargs):
+            if isinstance(value, dict) and 'revision' in value and 'pages' in value:
+                raise ValueError('favorite state serialization rejected')
+            return real_dumps(value, *args, **kwargs)
+
+        with patch('json.dumps', side_effect=fail_state):
+            failed = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+                json={'favorite': True}, headers=self.auth)
+        self.assertEqual(failed.status_code, 500)
+        actual = self.files()
+        # A valid optional export is not a policy choice about retaining it.
+        self.assertEqual({p: data for p, data in actual.items() if p != exported}, files)
+        if exported in actual:
+            self.assertEqual(actual[exported], files[Path('drawings') / f'{drawing_id}.svg'])
+        self.assert_recovery(before, actual)
+        self.assert_favorite_retry(drawing, before, actual)
+
+    def test_startup_favorite_repair_first_middle_final_copy_failure_is_retryable_without_state_changes(self):
+        repairs = [self.drawings[1]]
+        for _ in range(2):
+            drawing = self.submit(uuid4().hex).json()
+            self.client.patch(f"/api/drawings/{drawing['id']}/favorite",
+                json={'favorite': True}, headers=self.auth).raise_for_status()
+            repairs.append(drawing)
+        unrelated = self.submit(uuid4().hex).json()
+        self.client.patch(f"/api/drawings/{unrelated['id']}/favorite",
+            json={'favorite': True}, headers=self.auth).raise_for_status()
+        before, complete_files = self.state(), self.files()
+        exports = [Path('favorites') / f"{d['id']}.svg" for d in repairs]
+        real_replace = os.replace
+        for index in range(3):
+            with self.subTest(failed_copy=index + 1):
+                for exported in exports:
+                    (self.directory / exported).unlink()
+                missing_files = self.files()
+                self.client.close()
+
+                def fail_copy(source, target):
+                    if Path(target) == self.directory / exports[index]:
+                        raise PermissionError(errno.EACCES, 'startup favorite repair rejected')
+                    return real_replace(source, target)
+
+                with patch('os.replace', side_effect=fail_copy):
+                    with self.assertRaises(PermissionError):
+                        create_app(self.directory)
+                expected = {**missing_files, **{p: complete_files[p] for p in exports[:index]}}
+                self.assertEqual(self.files(), expected)
+                self.assertEqual(json.loads(expected[Path('state.json')])['revision'], before['revision'])
+                self.open_app()
+                self.assert_recovery(before, complete_files)
+                for drawing in [*repairs, unrelated]:
+                    exported = Path('favorites') / f"{drawing['id']}.svg"
+                    self.assertEqual(self.client.get(f"/api/favorites/{drawing['id']}").content, complete_files[exported])

@@ -130,18 +130,31 @@ def cell_geometry(cell_id):
     return left + col * (SIZE + GAP), 240 + row * (SIZE + GAP)
 
 
+def _reconcile_cell_active(cell):
+    """Repair an invalid selection and its clock, without changing the queue."""
+    if cell['active'] not in cell['drawing_ids']:
+        cell['active'] = cell['drawing_ids'][0] if cell['drawing_ids'] else None
+        cell['shown_at'] = time.time() if cell['active'] else None
+
+
+def _cell_display_item(cell):
+    """Derive presentation geometry without changing selection or timing."""
+    if cell['active']:
+        x, y = cell_geometry(cell['id'])
+        return {'drawing_id': cell['active'], 'cell_id': cell['id'],
+            'x': (x + SIZE / 2) / 1536,
+            'y': (y + SIZE / 2) / 768,
+            'scale': 1, 'rotation': 0}
+
+
 def sync_items(page):
+    """Mutate cell selections/clocks as needed, then rebuild display items."""
     page['items'] = []
     for cell in page['cells']:
-        if cell['active'] not in cell['drawing_ids']:
-            cell['active'] = cell['drawing_ids'][0] if cell['drawing_ids'] else None
-            cell['shown_at'] = time.time() if cell['active'] else None
-        if cell['active']:
-            x, y = cell_geometry(cell['id'])
-            page['items'].append({'drawing_id': cell['active'], 'cell_id': cell['id'],
-                'x': (x + SIZE / 2) / 1536,
-                'y': (y + SIZE / 2) / 768,
-                'scale': 1, 'rotation': 0})
+        _reconcile_cell_active(cell)
+        item = _cell_display_item(cell)
+        if item is not None:
+            page['items'].append(item)
 
 
 def ensure_cells(page):

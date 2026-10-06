@@ -92,10 +92,17 @@ def decode_png(data, *, crop=True, limit=SNAPSHOT_LIMIT):
         raise HTTPException(422, "PNG không hợp lệ hoặc bị hỏng. Hãy xuất lại ảnh.")
 
 
-def new_page(state):
+def create_page(state):
+    """Append an empty page without changing the displayed page, revision or timers."""
     page = {"id": uuid4().hex, "name": f"Trang {len(state['pages']) + 1:02d}", "items": []}
     led.ensure_cells(page)
     state["pages"].append(page)
+    return page
+
+
+def new_page(state):
+    """Create and display a page in the supplied state; Store owns commit/timing."""
+    page = create_page(state)
     state["current_page_id"] = page["id"]
     return page
 
@@ -177,6 +184,19 @@ def _archive_drawing(state, drawing):
 
 def add_item(state, drawing_id):
     led.assign(current_page(state), drawing_id, paused=state['settings']['paused'] or bool(state.get('ending')))
+
+
+def _update_page_timers(state, now):
+    """Freeze inactive pages and preserve elapsed cell time when they resume."""
+    for page in state['pages']:
+        running = page['id'] == state['current_page_id'] and not state['settings']['paused'] and not state.get('ending')
+        if not running:
+            page.setdefault('timer_paused_at', now)
+        elif 'timer_paused_at' in page:
+            paused_at = page.pop('timer_paused_at')
+            for cell in page['cells']:
+                if cell.get('shown_at') is not None:
+                    cell['shown_at'] += now - max(paused_at, cell['shown_at'])
 
 
 class Store:
@@ -275,15 +295,8 @@ class Store:
             state = copy.deepcopy(self.state)
             result = callback(state)
             now = time.time()
-            for page in state['pages']:
-                running = page['id'] == state['current_page_id'] and not state['settings']['paused'] and not state.get('ending')
-                if not running:
-                    page.setdefault('timer_paused_at', now)
-                elif 'timer_paused_at' in page:
-                    paused_at = page.pop('timer_paused_at')
-                    for cell in page['cells']:
-                        if cell.get('shown_at') is not None:
-                            cell['shown_at'] += now - max(paused_at, cell['shown_at'])
+            # Finalize timing after the callback, on the copy committed below.
+            _update_page_timers(state, now)
             state["revision"] += 1
             self.commit(state)
             return result
@@ -508,10 +521,8 @@ def create_app(storage_path=None):
         atomic_write(store.directory / "snapshots" / f"{snapshot_id}.png", clean)
         def save_moment(state):
             ids = selected if selected is not None else [c["active"] for c in current_page(state)["cells"]]
-            active_page = state["current_page_id"]
-            page = new_page(state)
+            page = create_page(state)
             page["name"] = item["name"]
-            state["current_page_id"] = active_page
             for index, drawing_id in enumerate(ids):
                 if drawing_id is not None:
                     drawing_id = identifier(drawing_id)
@@ -612,9 +623,7 @@ def create_app(storage_path=None):
             if operation == "settings" and request.method == "PATCH":
                 _update_settings(state["settings"], body)
             elif operation == "pages" and request.method == "POST":
-                active_page = state["current_page_id"]
-                new_page(state)
-                state["current_page_id"] = active_page
+                create_page(state)
             elif len(parts) == 2 and parts[0] == "pages" and request.method == "DELETE":
                 page_id = identifier(parts[1])
                 _delete_page(state, page_id)

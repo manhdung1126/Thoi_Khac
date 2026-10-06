@@ -8,7 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from backend.app.main import Store, create_app, current_page, new_page
+from backend.app.main import Store, create_app, create_page, current_page, new_page
 
 
 class PageContracts(unittest.TestCase):
@@ -88,6 +88,23 @@ class PageContracts(unittest.TestCase):
         self.assertNotIn('timer_paused_at', page)
         self.assertEqual(json.loads(first.path.read_text()), first.state)
         self.assertEqual(Store(first.directory).public(), state)
+
+    def test_create_page_appends_offair_without_changing_live_state_revision_or_timers(self):
+        before = copy.deepcopy(self.store.state)
+        working = copy.deepcopy(before)
+        self.clock.return_value = 103
+        page = create_page(working)
+        self.assertEqual(working['current_page_id'], self.live)
+        self.assertEqual(working['revision'], before['revision'])
+        self.assertEqual(working['pages'], before['pages'] + [page])
+        for key in ['settings', 'drawings', 'snapshots', 'submissions']:
+            self.assertEqual(working[key], before[key], key)
+        self.assertEqual(page['items'], [])
+        self.assertEqual(len(page['cells']), 27)
+        self.assertTrue(all(not c['drawing_ids'] and c['active'] is None and c['shown_at'] is None for c in page['cells']))
+        self.assertNotIn('timer_paused_at', page)
+        self.assertEqual(self.store.state, before)
+        self.assert_durable()
 
     def test_new_page_helper_switches_its_input_but_store_owns_revision_and_timer_transition(self):
         before = copy.deepcopy(self.store.state)

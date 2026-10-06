@@ -454,3 +454,261 @@ class FileStateContracts(unittest.TestCase):
                 self.open_app()
                 self.assertEqual(self.state(), before)
                 self.assert_purge_retry(drawing, before, files)
+
+    def test_unfavorite_state_persistence_failure_keeps_flag_export_and_retries_after_restart(self):
+        drawing = self.drawings[1]
+        drawing_id = drawing['id']
+        before, files = self.state(), self.files()
+        exported = Path('favorites') / f'{drawing_id}.svg'
+        real_replace = os.replace
+
+        def fail_state(source, target):
+            if Path(target) == self.directory / 'state.json':
+                raise OSError(errno.ENOSPC, 'unfavorite state persistence rejected')
+            return real_replace(source, target)
+
+        with patch('os.replace', side_effect=fail_state):
+            failed = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+                json={'favorite': False}, headers=self.auth)
+        self.assertEqual(failed.status_code, 507)
+        self.assert_recovery(before, files)
+        self.assertEqual(self.client.get(f'/api/favorites/{drawing_id}').content, files[exported])
+        retry = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+            json={'favorite': False}, headers=self.auth)
+        self.assertEqual(retry.status_code, 200)
+        after, actual = self.state(), self.files()
+        self.assertEqual(after, {**before, 'revision': before['revision'] + 1,
+            'drawings': [{**d, 'favorite': False} if d['id'] == drawing_id else d for d in before['drawings']]})
+        self.assertEqual({p: data for p, data in actual.items() if p != Path('state.json')},
+                         {p: data for p, data in files.items() if p not in {Path('state.json'), exported}})
+        self.assert_recovery(after, actual)
+        self.assertEqual(self.client.get(f'/api/favorites/{drawing_id}').status_code, 404)
+
+    def test_unfavorite_export_delete_failure_commits_flag_but_remains_retryable_after_restart(self):
+        drawing = self.drawings[1]
+        drawing_id = drawing['id']
+        before, files = self.state(), self.files()
+        exported = Path('favorites') / f'{drawing_id}.svg'
+        target = self.directory / exported
+        real_unlink = Path.unlink
+
+        def fail_export(path, *args, **kwargs):
+            if path == target:
+                raise PermissionError(errno.EACCES, 'favorite export deletion rejected')
+            return real_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, 'unlink', fail_export):
+            failed = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+                json={'favorite': False}, headers=self.auth)
+        self.assertEqual(failed.status_code, 507)
+        after, actual = self.state(), self.files()
+        self.assertEqual(after, {**before, 'revision': before['revision'] + 1,
+            'drawings': [{**d, 'favorite': False} if d['id'] == drawing_id else d for d in before['drawings']]})
+        self.assertEqual({p: data for p, data in actual.items() if p != Path('state.json')},
+                         {p: data for p, data in files.items() if p != Path('state.json')})
+        self.assert_recovery(after, actual)
+        self.assertEqual(self.client.get(f'/api/favorites/{drawing_id}').content, files[exported])
+        retry = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+            json={'favorite': False}, headers=self.auth)
+        self.assertEqual(retry.status_code, 200)
+        retried, retry_files = self.state(), self.files()
+        self.assertEqual(retried, {**after, 'revision': after['revision'] + 1})
+        self.assertEqual({p: data for p, data in retry_files.items() if p != Path('state.json')},
+                         {p: data for p, data in files.items() if p not in {Path('state.json'), exported}})
+        self.assert_recovery(retried, retry_files)
+        self.assertEqual(self.client.get(f'/api/favorites/{drawing_id}').status_code, 404)
+
+    def test_unfavorite_missing_export_is_tolerated_and_stays_removed_after_restart(self):
+        drawing = self.drawings[1]
+        drawing_id = drawing['id']
+        exported = Path('favorites') / f'{drawing_id}.svg'
+        (self.directory / exported).unlink()
+        before, files = self.state(), self.files()
+        response = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+            json={'favorite': False}, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        after, actual = self.state(), self.files()
+        self.assertEqual(after, {**before, 'revision': before['revision'] + 1,
+            'drawings': [{**d, 'favorite': False} if d['id'] == drawing_id else d for d in before['drawings']]})
+        self.assertEqual({p: data for p, data in actual.items() if p != Path('state.json')},
+                         {p: data for p, data in files.items() if p != Path('state.json')})
+        self.assert_recovery(after, actual)
+        self.assertEqual(self.client.get(f'/api/favorites/{drawing_id}').status_code, 404)
+        retry = self.client.patch(f'/api/drawings/{drawing_id}/favorite',
+            json={'favorite': False}, headers=self.auth)
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(self.state(), {**after, 'revision': after['revision'] + 1})
+
+    def test_snapshot_delete_failure_does_not_leave_unmanaged_png_after_restart_and_retry(self):
+        response = self.moment()
+        self.assertEqual(response.status_code, 201)
+        snapshot = response.json()
+        response = self.moment()
+        self.assertEqual(response.status_code, 201)
+        unrelated = response.json()
+        before, files = self.state(), self.files()
+        png = Path('snapshots') / f"{snapshot['id']}.png"
+        source = self.directory / png
+        real_replace = os.replace
+
+        def fail_snapshot(path, target):
+            if Path(path) == source:
+                raise PermissionError(errno.EACCES, 'snapshot staging rejected')
+            return real_replace(path, target)
+
+        with patch('os.replace', side_effect=fail_snapshot):
+            failed = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        self.assertEqual(failed.status_code, 507)
+        self.assertIn('detail', failed.json())
+        after, actual = self.state(), self.files()
+        for key in ['settings', 'drawings', 'current_page_id']:
+            self.assertEqual(after[key], before[key], key)
+        self.assertEqual({p: data for p, data in actual.items() if p != Path('state.json')},
+                         {p: data for p, data in files.items() if p != Path('state.json')})
+        self.assertEqual(next(s for s in after['snapshots'] if s['id'] == unrelated['id']), unrelated)
+        self.assertEqual(next(p for p in after['pages'] if p['id'] == unrelated['page_id']),
+                         next(p for p in before['pages'] if p['id'] == unrelated['page_id']))
+        self.assert_recovery(after, actual)
+        asset_after_restart = self.client.get(snapshot['image_path']).status_code
+        self.assertEqual(self.client.get(unrelated['image_path']).content,
+                         files[Path('snapshots') / f"{unrelated['id']}.png"])
+        retry = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        retried, retry_files = self.state(), self.files()
+        self.assert_recovery(retried, retry_files)
+        registered = {Path(s['image_path']).name for s in retried['snapshots']}
+        unmanaged = sorted(str(p) for p in retry_files
+                           if p.parent == Path('snapshots') and p.name not in registered)
+        print('SNAPSHOT_DELETE_FAILURE_EVIDENCE ' + json.dumps({
+            'api_status': failed.status_code, 'retry_status': retry.status_code,
+            'revision_before': before['revision'], 'revision_after_failure': after['revision'],
+            'revision_after_retry': retried['revision'],
+            'snapshot_metadata_present': any(s['id'] == snapshot['id'] for s in after['snapshots']),
+            'snapshot_page_present': any(p['id'] == snapshot['page_id'] for p in after['pages']),
+            'png_present_after_failure': png in actual, 'asset_get_after_restart': asset_after_restart,
+            'unmanaged_png_after_retry_and_restart': unmanaged,
+            'unrelated_snapshot_get': self.client.get(unrelated['image_path']).status_code,
+            'persisted_state_matches_store': self.client.app.state.store.state == json.loads(retry_files[Path('state.json')]),
+        }), flush=True)
+        self.assertEqual(unmanaged, [],
+            f"P2: snapshot delete returned {failed.status_code}, retry returned {retry.status_code}, "
+            'but PNG remains without snapshot metadata after restart')
+
+    def snapshot_delete_fixture(self):
+        response = self.moment()
+        self.assertEqual(response.status_code, 201)
+        snapshot = response.json()
+        response = self.moment()
+        self.assertEqual(response.status_code, 201)
+        return snapshot, self.state(), self.files()
+
+    def assert_snapshot_deleted(self, snapshot, before, files):
+        after, actual = self.state(), self.files()
+        self.assertEqual(after, {**before, 'revision': before['revision'] + 1,
+            'snapshots': [s for s in before['snapshots'] if s['id'] != snapshot['id']],
+            'pages': [p for p in before['pages'] if p['id'] != snapshot['page_id']]})
+        png = Path('snapshots') / f"{snapshot['id']}.png"
+        self.assertEqual({p: data for p, data in actual.items() if p != Path('state.json')},
+                         {p: data for p, data in files.items() if p not in {Path('state.json'), png}})
+        self.assert_recovery(after, actual)
+        self.assertEqual(self.client.get(snapshot['image_path']).status_code, 404)
+        for other in after['snapshots']:
+            self.assertEqual(self.client.get(other['image_path']).content,
+                             files[Path('snapshots') / f"{other['id']}.png"])
+        self.assertEqual(self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth).status_code, 404)
+        self.assertEqual(self.state(), after)
+        self.assertEqual(self.files(), actual)
+
+    def test_snapshot_staging_failure_preserves_page_metadata_revision_and_png_until_retry(self):
+        snapshot, before, files = self.snapshot_delete_fixture()
+        source = self.directory / 'snapshots' / f"{snapshot['id']}.png"
+        real_replace = os.replace
+
+        def fail_staging(path, target):
+            if Path(path) == source:
+                raise PermissionError(errno.EACCES, 'snapshot staging rejected')
+            return real_replace(path, target)
+
+        with patch('os.replace', side_effect=fail_staging):
+            failed = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        self.assertEqual(failed.status_code, 507)
+        self.assert_recovery(before, files)
+        self.assertEqual(self.client.get(snapshot['image_path']).content, files[source.relative_to(self.directory)])
+        retry = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        self.assertEqual(retry.status_code, 200)
+        self.assert_snapshot_deleted(snapshot, before, files)
+
+    def test_snapshot_persistence_failure_after_staging_restores_png_and_page_before_restart_retry(self):
+        snapshot, before, files = self.snapshot_delete_fixture()
+        png = Path('snapshots') / f"{snapshot['id']}.png"
+        source = self.directory / png
+        real_replace = os.replace
+        staged = []
+        reached_commit = []
+
+        def fail_commit(path, target):
+            if Path(target) == self.directory / 'state.json':
+                self.assertFalse(source.exists())
+                self.assertEqual(len(staged), 1)
+                self.assertEqual(staged[0].read_bytes(), files[png])
+                reached_commit.append(True)
+                raise OSError(errno.ENOSPC, 'snapshot state persistence rejected after staging')
+            result = real_replace(path, target)
+            if Path(path) == source:
+                staged.append(Path(target))
+            return result
+
+        with patch('os.replace', side_effect=fail_commit):
+            failed = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        self.assertEqual(failed.status_code, 507)
+        self.assertEqual(reached_commit, [True])
+        self.assert_recovery(before, files)
+        self.assertEqual(self.client.get(snapshot['image_path']).content, files[png])
+        retry = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        self.assertEqual(retry.status_code, 200)
+        self.assert_snapshot_deleted(snapshot, before, files)
+
+    def test_snapshot_post_commit_cleanup_failure_retains_only_private_png_and_never_resurrects(self):
+        snapshot, before, files = self.snapshot_delete_fixture()
+        png = Path('snapshots') / f"{snapshot['id']}.png"
+        real_unlink = Path.unlink
+        cleanup_targets = []
+
+        def fail_cleanup(path, *args, **kwargs):
+            if path.parent == self.directory and path.name.startswith('.snapshot-delete-'):
+                cleanup_targets.append(path)
+                raise PermissionError(errno.EACCES, 'snapshot quarantine cleanup rejected')
+            return real_unlink(path, *args, **kwargs)
+
+        with self.assertLogs('backend.app.main', level='ERROR') as logs:
+            with patch.object(Path, 'unlink', fail_cleanup):
+                response = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(cleanup_targets), 1)
+        artifact = cleanup_targets[0].relative_to(self.directory)
+        self.assertTrue(any('Committed snapshot delete cleanup deferred' in message
+                            and str(cleanup_targets[0]) in message for message in logs.output))
+        after, actual = self.state(), self.files()
+        self.assertEqual(after, {**before, 'revision': before['revision'] + 1,
+            'snapshots': [s for s in before['snapshots'] if s['id'] != snapshot['id']],
+            'pages': [p for p in before['pages'] if p['id'] != snapshot['page_id']]})
+        expected_files = {p: data for p, data in files.items() if p not in {Path('state.json'), png}}
+        expected_files[artifact] = files[png]
+        self.assertEqual({p: data for p, data in actual.items() if p != Path('state.json')}, expected_files)
+        self.assert_recovery(after, actual)
+        self.assertEqual(self.client.get(snapshot['image_path']).status_code, 404)
+        self.assertEqual(self.client.get('/api/media/' + artifact.name).status_code, 404)
+        for other in after['snapshots']:
+            self.assertEqual(self.client.get(other['image_path']).content,
+                             files[Path('snapshots') / f"{other['id']}.png"])
+        self.assertEqual(self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth).status_code, 404)
+        self.assertEqual(self.state(), after)
+        self.assertEqual(self.files(), actual)
+
+    def test_snapshot_missing_png_allows_metadata_page_cleanup_and_survives_restart(self):
+        snapshot, before, _ = self.snapshot_delete_fixture()
+        (self.directory / 'snapshots' / f"{snapshot['id']}.png").unlink()
+        files = self.files()
+        self.assert_recovery(before, files)
+        response = self.client.delete(f"/api/snapshots/{snapshot['id']}", headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assert_snapshot_deleted(snapshot, before, files)

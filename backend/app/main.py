@@ -545,8 +545,9 @@ def create_app(storage_path=None):
         files_to_delete = []
         purge_directory = None
         staged_files = []
+        staged_snapshot = None
         def change(state):
-            nonlocal purge_directory
+            nonlocal purge_directory, staged_snapshot
             active_ending = state.get("ending")
             if active_ending and ((parts[0] == "pages" and parts[-1] == "activate") or
                 (parts[0] == "pages" and len(parts) == 2 and request.method == "DELETE" and parts[1] == active_ending["page_id"])):
@@ -682,10 +683,14 @@ def create_app(storage_path=None):
                     raise HTTPException(409, "Khoảnh khắc đang dùng cho Ending. Quay lại Normal trước.")
                 if page_id and page_id == state["current_page_id"]:
                     raise HTTPException(409, "Hãy chuyển sang trang khác trước khi xóa khoảnh khắc đang chiếu.")
+                source = store.directory / "snapshots" / f"{snapshot_id}.png"
+                target = store.directory / f".snapshot-delete-{snapshot_id}-{uuid4().hex}.png"
+                with suppress(FileNotFoundError):
+                    os.replace(source, target)
+                    staged_snapshot = (source, target)
                 if page_id:
                     state["pages"] = [p for p in state["pages"] if p["id"] != page_id]
                 state["snapshots"].remove(snapshot)
-                files_to_delete.append(store.directory / "snapshots" / f"{snapshot_id}.png")
             else:
                 raise HTTPException(404, "Chức năng không tồn tại.")
         # Serialize staging, commit and rollback with other state mutations/public reads.
@@ -703,6 +708,12 @@ def create_app(storage_path=None):
                         purge_directory.rmdir()
                     except OSError:
                         logger.exception("Purge rollback artifact retained at %s", purge_directory)
+                if staged_snapshot is not None:
+                    source, target = staged_snapshot
+                    try:
+                        os.replace(target, source)
+                    except OSError:
+                        logger.exception("Snapshot delete rollback failed: %s -> %s", target, source)
                 raise
         if purge_directory is not None:
             # Cleanup errors retain only private .purge-* artifacts, logged for removal.
@@ -715,6 +726,11 @@ def create_app(storage_path=None):
                 purge_directory.rmdir()
             except OSError:
                 logger.exception("Committed purge quarantine retained at %s", purge_directory)
+        if staged_snapshot is not None:
+            try:
+                staged_snapshot[1].unlink()
+            except OSError:
+                logger.exception("Committed snapshot delete cleanup deferred: %s", staged_snapshot[1])
         for path in files_to_delete:
             with suppress(FileNotFoundError):
                 path.unlink()

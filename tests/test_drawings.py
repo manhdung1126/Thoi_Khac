@@ -275,3 +275,97 @@ class MvpTests(unittest.TestCase):
         state = self.change(f"/api/pages/{selected}/items/{drawing['id']}", "delete")
         self.assertEqual(state["current_page_id"], live)
         self.assertFalse(next(page for page in state["pages"] if page["id"] == selected)["cells"][4]["drawing_ids"])
+
+    def test_dispatcher_validation_order_errors_and_rejected_revision_contract(self):
+        drawing = self.upload().json()['id']
+        before = self.client.get('/api/state').json()
+        live, missing = before['current_page_id'], uuid4().hex
+        cases = [
+            ('PATCH', '/api/pages/not-a-uuid', '{', {}, 401, 'Hãy đăng nhập bàn điều khiển.'),
+            ('PATCH', '/api/pages/not-a-uuid', '{', self.auth, 422, 'Dữ liệu không hợp lệ.'),
+            ('PATCH', '/api/pages/not-a-uuid', '[]', self.auth, 422, 'Dữ liệu phải là một đối tượng.'),
+            ('PATCH', '/api/pages/not-a-uuid', {'name': ''}, self.auth, 422, 'Mã không hợp lệ.'),
+            ('PATCH', f'/api/pages/{missing}', {'name': ''}, self.auth, 422, 'Tên trang cần từ 1 đến 80 ký tự.'),
+            ('PATCH', f'/api/pages/{missing}', {'name': 'Valid'}, self.auth, 404, 'Không tìm thấy trang.'),
+            ('POST', '/api/unknown-action', {}, self.auth, 404, 'Chức năng không tồn tại.'),
+            ('POST', f'/api/drawings/{drawing}/unknown-action', {}, self.auth, 404, 'Not Found'),
+            ('POST', f'/api/items/{drawing}', {}, self.auth, 405, 'Method Not Allowed'),
+            ('PATCH', '/api/pages/not-a-uuid/cells/4', {'drawing_id': drawing}, self.auth, 422, 'Mã không hợp lệ.'),
+            ('PATCH', f'/api/pages/{live}/cells/4', {'drawing_id': 'invalid'}, self.auth, 422, 'Mã không hợp lệ.'),
+        ]
+        for method, path, body, headers, status, detail in cases:
+            with self.subTest(method=method, path=path, body=body):
+                options = {'content': body} if isinstance(body, str) else {'json': body}
+                response = self.client.request(method, path, headers=headers, **options)
+                self.assertEqual(response.status_code, status, response.text)
+                self.assertEqual(response.json(), {'detail': detail})
+                after = self.client.get('/api/state').json()
+                for key in ('revision', 'current_page_id', 'pages', 'drawings', 'settings', 'snapshots'):
+                    self.assertEqual(after[key], before[key], key)
+
+    def test_dispatcher_live_and_page_specific_item_actions_do_not_cross_page_boundaries(self):
+        drawing = self.upload().json()['id']
+        live = self.client.get('/api/state').json()['current_page_id']
+        created = self.change('/api/pages')
+        selected = next(page['id'] for page in created['pages'] if page['id'] != live)
+        self.change(f'/api/pages/{selected}/items', drawing_id=drawing, cell_id=4)
+        def ids(state, page_id):
+            return [item for page in state['pages'] if page['id'] == page_id for cell in page['cells'] for item in cell['drawing_ids']]
+        operations = [
+            ('delete', f'/api/items/{drawing}', {}, [], [drawing]),
+            ('post', '/api/items', {'drawing_id': drawing, 'cell_id': 6}, [drawing], [drawing]),
+            ('delete', f'/api/pages/{selected}/items/{drawing}', {}, [drawing], []),
+        ]
+        for method, path, body, live_ids, selected_ids in operations:
+            with self.subTest(path=path):
+                before = self.client.get('/api/state').json()
+                after = self.change(path, method, **body)
+                self.assertEqual(after['revision'], before['revision'] + 1)
+                self.assertEqual(after['current_page_id'], live)
+                self.assertEqual(ids(after, live), live_ids)
+                self.assertEqual(ids(after, selected), selected_ids)
+                self.assertEqual(after['drawings'], before['drawings'])
+
+    def test_dispatcher_settings_validation_is_atomic_and_preserves_public_response_contract(self):
+        before = self.client.get('/api/state').json()
+        invalid = [
+            ({'rotation_seconds': 17, 'unknown': True}, 'Thiết lập không được hỗ trợ.'),
+            ({'paused': 'true'}, 'Giá trị tạm dừng không hợp lệ.'),
+            ({'led_fade': True}, 'Thời gian chuyển ảnh phải từ 0,2 đến 1,8 giây.'),
+            ({'led_fade': 0.1}, 'Thời gian chuyển ảnh phải từ 0,2 đến 1,8 giây.'),
+        ]
+        for body, detail in invalid:
+            with self.subTest(body=body):
+                response = self.client.patch('/api/settings', headers=self.auth, json=body)
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json(), {'detail': detail})
+                after = self.client.get('/api/state').json()
+                self.assertEqual(after['settings'], before['settings'])
+                self.assertEqual(after['revision'], before['revision'])
+        for seconds, fade in ((2, .2), (120, 1.8)):
+            previous = self.client.get('/api/state').json()
+            after = self.change('/api/settings', 'patch', rotation_seconds=seconds, led_fade=fade, paused=False)
+            self.assertEqual(after['revision'], previous['revision'] + 1)
+            self.assertEqual(after['settings'], {'rotation_seconds': seconds, 'led_fade': fade, 'paused': False})
+            self.assertEqual(after['current_page_id'], before['current_page_id'])
+            self.assertEqual(after['pages'], before['pages'])
+            self.assertEqual(after['drawings'], before['drawings'])
+            self.assertEqual(after['snapshots'], before['snapshots'])
+
+    def test_dispatcher_deleting_live_page_uses_next_then_previous_page_as_fallback(self):
+        initial = self.client.get('/api/state').json()['current_page_id']
+        self.change('/api/pages')
+        created = self.change('/api/pages')
+        middle, last = [page['id'] for page in created['pages'] if page['id'] != initial]
+        self.change(f'/api/pages/{middle}/activate')
+        for deleted_id, fallback_id in ((middle, last), (last, initial)):
+            with self.subTest(deleted=deleted_id):
+                before = self.client.get('/api/state').json()
+                self.assertEqual(before['current_page_id'], deleted_id)
+                after = self.change(f'/api/pages/{deleted_id}', 'delete')
+                self.assertEqual(after['revision'], before['revision'] + 1)
+                self.assertEqual(after['current_page_id'], fallback_id)
+                self.assertFalse(any(page['id'] == deleted_id for page in after['pages']))
+                self.assertEqual(after['drawings'], before['drawings'])
+                self.assertEqual(after['settings'], before['settings'])
+                self.assertEqual(after['snapshots'], before['snapshots'])

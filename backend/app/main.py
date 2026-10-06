@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import io
 import json
+import logging
 import math
 import os
 import secrets
@@ -26,6 +27,7 @@ from backend.app import led, ending
 ROOT = Path(__file__).resolve().parents[1]
 VECTOR_LIMIT = 2 * 1024 * 1024
 SNAPSHOT_LIMIT = 10 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 class FrontendFiles(StaticFiles):
@@ -541,7 +543,10 @@ def create_app(storage_path=None):
         body = await body_object(request) if request.method != "DELETE" else {}
         parts = operation.split("/")
         files_to_delete = []
+        purge_directory = None
+        staged_files = []
         def change(state):
+            nonlocal purge_directory
             active_ending = state.get("ending")
             if active_ending and ((parts[0] == "pages" and parts[-1] == "activate") or
                 (parts[0] == "pages" and len(parts) == 2 and request.method == "DELETE" and parts[1] == active_ending["page_id"])):
@@ -649,14 +654,18 @@ def create_app(storage_path=None):
                         raise HTTPException(409, "Nét đang thuộc bộ Ending. Quay lại Normal trước khi xóa vĩnh viễn.")
                     if not drawing["deleted"]:
                         raise HTTPException(409, "Hãy đưa nét vẽ vào thùng rác trước khi xóa vĩnh viễn.")
+                    # Same-filesystem moves are reversible until state is committed.
+                    purge_directory = Path(tempfile.mkdtemp(prefix=".purge-", dir=store.directory))
+                    for source in (store.directory / "drawings" / f"{drawing_id}.svg",
+                                   store.directory / "vectors" / f"{drawing_id}.json"):
+                        target = purge_directory / source.name
+                        with suppress(FileNotFoundError):
+                            os.replace(source, target)
+                            staged_files.append((source, target))
                     for page in state["pages"]:
                         led.remove(page, drawing_id)
                     state["submissions"] = {key: value for key, value in state["submissions"].items() if value.get("id") != drawing_id}
                     state["drawings"].remove(drawing)
-                    files_to_delete.extend([
-                        store.directory / "drawings" / f"{drawing_id}.svg",
-                        store.directory / "vectors" / f"{drawing_id}.json",
-                    ])
                 elif len(parts) == 2 and request.method == "DELETE":
                     drawing["deleted"] = True
                     for page in state["pages"]:
@@ -679,7 +688,33 @@ def create_app(storage_path=None):
                 files_to_delete.append(store.directory / "snapshots" / f"{snapshot_id}.png")
             else:
                 raise HTTPException(404, "Chức năng không tồn tại.")
-        store.mutate(change)
+        # Serialize staging, commit and rollback with other state mutations/public reads.
+        with store.lock:
+            try:
+                store.mutate(change)
+            except Exception:
+                for source, target in reversed(staged_files):
+                    try:
+                        os.replace(target, source)
+                    except OSError:
+                        logger.exception("Purge rollback failed: %s -> %s", target, source)
+                if purge_directory is not None:
+                    try:
+                        purge_directory.rmdir()
+                    except OSError:
+                        logger.exception("Purge rollback artifact retained at %s", purge_directory)
+                raise
+        if purge_directory is not None:
+            # Cleanup errors retain only private .purge-* artifacts, logged for removal.
+            for _, target in staged_files:
+                try:
+                    target.unlink()
+                except OSError:
+                    logger.exception("Committed purge cleanup deferred: %s", target)
+            try:
+                purge_directory.rmdir()
+            except OSError:
+                logger.exception("Committed purge quarantine retained at %s", purge_directory)
         for path in files_to_delete:
             with suppress(FileNotFoundError):
                 path.unlink()

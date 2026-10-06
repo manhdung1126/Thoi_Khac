@@ -35,8 +35,8 @@ async function mutate(path, method = "POST", body = {}, message = "Đã cập nh
   if (!getToken()) { openLogin(); return; }
   busy = true; access(); notice("Đang lưu thay đổi…");
   try {
-    const result = await api(path, { method, body: method === "DELETE" ? undefined : body, auth: true });
-    await subscription.refresh(); notice(message); return result;
+    await api(path, { method, body: method === "DELETE" ? undefined : body, auth: true });
+    const result = await subscription.refresh(); notice(message); return result;
   } catch (error) {
     notice(error.message, true);
     if (error.status === 401) openLogin();

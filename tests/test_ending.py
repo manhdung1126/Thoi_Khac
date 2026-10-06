@@ -69,3 +69,34 @@ class EndingTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/ending/" + uuid4().hex + "/reset", headers=self.auth).status_code, 409)
         self.client.app.state.store.ending_ready[e["id"]] = {uuid4().hex: time.time() - 46}
         self.assertEqual(self.client.post("/api/ending/" + e["id"] + "/start", headers=self.auth).status_code, 409)
+
+    def test_dispatcher_ending_blocks_live_navigation_and_deletion_but_allows_off_air_page_management(self):
+        self.upload()
+        prepared = self.prepare().json()
+        live = prepared['current_page_id']
+        created = self.client.post('/api/pages', headers=self.auth, json={})
+        self.assertEqual(created.status_code, 200)
+        state = created.json()
+        other = next(page['id'] for page in state['pages'] if page['id'] != live)
+        self.assertEqual(state['current_page_id'], live)
+        self.assertEqual(state['revision'], prepared['revision'] + 1)
+        renamed = self.client.patch(f'/api/pages/{other}', headers=self.auth, json={'name': 'Off-air during Ending'})
+        self.assertEqual(renamed.status_code, 200)
+        self.assertEqual(renamed.json()['revision'], state['revision'] + 1)
+        before = self.client.get('/api/state').json()
+        for method, path in [('POST', f'/api/pages/{other}/activate'), ('DELETE', f'/api/pages/{live}')]:
+            with self.subTest(path=path):
+                options = {'json': {}} if method == 'POST' else {}
+                response = self.client.request(method, path, headers=self.auth, **options)
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.json(), {'detail': 'Quay lại Normal trước khi chuyển hoặc xóa trang đang Ending.'})
+                after = self.client.get('/api/state').json()
+                for key in ('revision', 'pages', 'current_page_id', 'ending'):
+                    self.assertEqual(after[key], before[key], key)
+        deleted = self.client.delete(f'/api/pages/{other}', headers=self.auth)
+        self.assertEqual(deleted.status_code, 200)
+        after = deleted.json()
+        self.assertEqual(after['revision'], before['revision'] + 1)
+        self.assertEqual(after['current_page_id'], live)
+        self.assertFalse(any(page['id'] == other for page in after['pages']))
+        self.assertEqual(after['ending'], before['ending'])

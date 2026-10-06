@@ -62,6 +62,202 @@ async function waitState(page,predicate,timeout=30000){
 }
 async function usable(page,locator){await locator.waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#send-button').disabled);}
 
+async function contractControl(t){
+  const context=await browser.newContext({viewport:{width:1440,height:1000}});t.after(()=>context.close());
+  const page=await context.newPage(),errors=[],messages=[],waiting=[];
+  const signals={next:()=>messages.length?Promise.resolve(messages.shift()):new Promise(resolve=>waiting.push(resolve))};
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.routeWebSocket('**/ws/display',socket=>{
+    signals.socket=socket;const remote=socket.connectToServer();
+    remote.onMessage(message=>{
+      if(['state_changed','drawing_created'].includes(JSON.parse(String(message)).type)){
+        if(waiting.length)waiting.shift()(message);else messages.push(message);
+      }else socket.send(message);
+    });
+  });
+  await page.goto(origin+'/control/');
+  const login=page.waitForResponse(response=>response.url()===origin+'/api/admin/login'&&response.ok());
+  await page.getByLabel('Mã quản lý',{exact:true}).fill('2468');
+  await page.getByRole('dialog').getByRole('button',{name:'Đăng nhập',exact:true}).click();
+  const headers={Authorization:'Bearer '+(await (await login).json()).token};
+  await page.locator('#login-dialog').waitFor({state:'hidden'});
+  await page.waitForFunction(()=>document.querySelector('#page-select').options.length&&!document.querySelector('#page-select').disabled);
+  return {page,headers,signals,errors};
+}
+
+test('Control retains its previous view when mutation commits but authoritative refresh fails', {timeout:30000},async t=>{
+  const {page,signals,errors}=await contractControl(t);
+  const before=await state(page),selected=await page.locator('#page-select').inputValue();
+  const previous=before.pages.find(item=>item.id===selected).name,newName='Đã lưu nhưng chưa đồng bộ';
+  await page.route(origin+'/api/state',route=>route.abort('failed'));
+  await page.getByRole('button',{name:'Đổi tên trang',exact:true}).click();
+  await page.getByLabel('Tên trang',{exact:true}).fill(newName);
+  const committed=page.waitForResponse(response=>response.url()===origin+'/api/pages/'+selected&&response.request().method()==='PATCH'&&response.ok());
+  await page.getByRole('button',{name:'Lưu tên',exact:true}).click();await committed;await signals.next();
+  await page.waitForFunction(()=>!document.querySelector('#rename-page').disabled&&document.querySelector('#connection-status').textContent.includes('Không kết nối được server'));
+  assert.equal(await page.locator('#rename-page-dialog').evaluate(node=>node.open),true);
+  assert.equal(await page.locator('#page-name').inputValue(),newName);
+  assert.equal(await page.locator('#page-select').inputValue(),selected);
+  const label=await page.locator('#page-select option').evaluateAll((options,id)=>options.find(option=>option.value===id).textContent,selected);
+  assert.equal(label,(selected===before.current_page_id?'● ':'')+previous);
+  // Capture current behavior, not a decision about the desired failure UX.
+  assert.equal(await page.locator('#notice').textContent(),'Đã đổi tên trang.');
+  const after=await state(page);
+  assert.equal(after.pages.find(item=>item.id===selected).name,newName);
+  assert.equal(after.revision,before.revision+1);
+  assert.equal(after.current_page_id,before.current_page_id);
+  assert.deepEqual(errors,[]);
+});
+
+test('Control preview selection survives mutation and repeated WebSocket reconciliation, explicit projection and live-page deletion fallback', {timeout:30000},async t=>{
+  const {page,headers,signals,errors}=await contractControl(t),before=await state(page),live=before.current_page_id;
+  const picker=page.getByRole('combobox',{name:/Trang đang chọn/});
+  await page.getByRole('button',{name:/Tạo trang/}).click();
+  await page.waitForFunction(id=>document.querySelector('#page-select').value!==id,live);await signals.next();
+  const first=await picker.inputValue();
+  assert.equal((await state(page)).current_page_id,live);
+  await page.getByRole('button',{name:/Tạo trang/}).click();
+  await page.waitForFunction(id=>document.querySelector('#page-select').value!==id,first);await signals.next();
+  const second=await picker.inputValue();
+  await picker.selectOption(first);
+  assert.equal((await state(page)).current_page_id,live);
+  await page.getByRole('button',{name:'Đổi tên trang',exact:true}).click();
+  await page.getByLabel('Tên trang',{exact:true}).fill('Trang chỉ đang xem trước');
+  await page.getByRole('button',{name:'Lưu tên',exact:true}).click();
+  await page.locator('#rename-page-dialog').waitFor({state:'hidden'});await signals.next();
+  assert.equal((await state(page)).current_page_id,live);
+  const name='Trang live đồng bộ qua HTTP';
+  const changed=await page.request.patch(origin+'/api/pages/'+live,{headers,data:{name}});
+  assert.equal(changed.status(),200);const authoritative=await changed.json(),message=await signals.next();
+  const started=Promise.withResolvers(),release=Promise.withResolvers();let held=false;
+  t.after(()=>release.resolve());
+  await page.route(origin+'/api/state',async route=>{
+    const response=await route.fetch();
+    if(!held){held=true;started.resolve();await release.promise;}
+    await route.fulfill({response});
+  });
+  signals.socket.send(message);await started.promise;
+  // Even misleading repeated notification payloads must never become UI state.
+  for(let i=0;i<4;i++)signals.socket.send(JSON.stringify({type:'state_changed',revision:999999,pages:[],current_page_id:'not-a-page'}));
+  release.resolve();
+  await page.waitForFunction(({id,name})=>Array.from(document.querySelector('#page-select').options).find(option=>option.value===id)?.textContent==='● '+name,{id:live,name});
+  assert.equal(await picker.inputValue(),first);
+  assert.equal(await page.locator('#stage-title').textContent(),'Bản xem trước trang');
+  assert.deepEqual(await picker.locator('option').evaluateAll(options=>options.map(option=>option.value)),authoritative.pages.map(item=>item.id));
+  assert.equal((await state(page)).current_page_id,live);
+  await page.unroute(origin+'/api/state');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Xóa trang',exact:true}).click();
+  await page.waitForFunction(id=>document.querySelector('#page-select').value===id,second);await signals.next();
+  const deleted=await state(page);
+  assert.equal(deleted.current_page_id,live);assert.ok(!deleted.pages.some(item=>item.id===first));
+  await page.getByRole('button',{name:'Chiếu trang',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#show-page').textContent==='Đang chiếu');await signals.next();
+  assert.equal((await state(page)).current_page_id,second);assert.equal(await picker.inputValue(),second);
+  // Deleting the live page is the documented exception: select/project a fallback.
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Xóa trang',exact:true}).click();
+  await page.waitForFunction(id=>document.querySelector('#page-select').value===id&&document.querySelector('#show-page').textContent==='Đang chiếu',live);await signals.next();
+  const fallback=await state(page);
+  assert.equal(fallback.current_page_id,live);assert.ok(!fallback.pages.some(item=>item.id===second));assert.deepEqual(errors,[]);
+});
+
+test('Control preserves focused and dirty cycle input and unfinished page-name editing across unrelated HTTP reconciliation', {timeout:30000},async t=>{
+  const {page,headers,signals,errors}=await contractControl(t),live=(await state(page)).current_page_id;
+  await page.getByRole('button',{name:/Tạo trang/}).click();
+  await page.waitForFunction(id=>document.querySelector('#page-select').value!==id,live);await signals.next();
+  const selected=await page.locator('#page-select').inputValue(),cycle=page.locator('#rotation-seconds');
+  async function renameFromAnotherOperator(name){
+    const response=await page.request.patch(origin+'/api/pages/'+selected,{headers,data:{name}});
+    assert.equal(response.status(),200);signals.socket.send(await signals.next());
+    await page.waitForFunction(({id,name})=>Array.from(document.querySelector('#page-select').options).find(option=>option.value===id)?.textContent===name,{id:selected,name});
+  }
+  await cycle.fill('37');await renameFromAnotherOperator('Đồng bộ khi đang nhập chu kỳ');
+  assert.equal(await cycle.inputValue(),'37');assert.equal(await cycle.evaluate(node=>node===document.activeElement),true);
+  await page.locator('#stage-title').click();await renameFromAnotherOperator('Đồng bộ khi đã rời ô chu kỳ');
+  assert.equal(await cycle.inputValue(),'37');
+  await page.getByRole('button',{name:'Đổi tên trang',exact:true}).click();
+  const input=page.getByLabel('Tên trang',{exact:true});await input.fill('Tên còn đang nhập, chưa lưu');
+  const settings=await page.request.patch(origin+'/api/settings',{headers,data:{rotation_seconds:11}});
+  assert.equal(settings.status(),200);await signals.next();
+  await renameFromAnotherOperator('Tên từ server không thay nội dung đang nhập');
+  assert.equal(await input.inputValue(),'Tên còn đang nhập, chưa lưu');
+  assert.equal(await input.evaluate(node=>node===document.activeElement),true);
+  assert.equal(await cycle.inputValue(),'37');assert.equal(await page.locator('#page-select').inputValue(),selected);
+  const after=await state(page);assert.equal(after.settings.rotation_seconds,11);assert.equal(after.current_page_id,live);
+  assert.equal(after.pages.find(item=>item.id===selected).name,'Tên từ server không thay nội dung đang nhập');
+  assert.deepEqual(errors,[]);
+});
+
+test('Control keeps authoritative refreshed state when a delayed mutation response is older', {timeout:30000},async t=>{
+  const context=await browser.newContext();t.after(()=>context.close());
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  const login=await page.request.post(origin+'/api/admin/login',{data:{pin:'2468'}});
+  assert.equal(login.status(),200);
+  const headers={Authorization:'Bearer '+(await login.json()).token};
+  const before=await state(page);
+  const created=await page.request.post(origin+'/api/pages',{headers,data:{}});
+  assert.equal(created.status(),200);
+  const offAir=(await created.json()).pages.find(item=>!before.pages.some(old=>old.id===item.id));
+  assert.ok(offAir);
+  // Hold back change notifications so the explicit post-mutation HTTP refresh is
+  // the only reconciliation source. The real server and mutation APIs still run.
+  await page.routeWebSocket('**/ws/display',socket=>{
+    const remote=socket.connectToServer();
+    remote.onMessage(message=>{
+      const type=JSON.parse(String(message)).type;
+      if(!['state_changed','drawing_created'].includes(type))socket.send(message);
+    });
+  });
+  await page.goto(origin+'/control/');
+  await page.getByLabel('Mã quản lý',{exact:true}).fill('2468');
+  await page.getByRole('dialog').getByRole('button',{name:'Đăng nhập',exact:true}).click();
+  await page.locator('#login-dialog').waitFor({state:'hidden'});
+  await page.getByRole('combobox',{name:/Trang đang chọn/}).selectOption(offAir.id);
+  const oldName='Tên từ phản hồi cũ',newName='Tên mới từ HTTP refresh';
+  const delivered=Promise.withResolvers();let mutationState,newerState;
+  await page.route(origin+'/api/pages/'+offAir.id,async route=>{
+    if(route.request().method()!=='PATCH')return route.continue();
+    try{
+      const response=await route.fetch();assert.equal(response.status(),200);
+      mutationState=await response.json();
+      // A second operator commits while the first operator's response is in flight.
+      const newer=await page.request.patch(origin+'/api/pages/'+offAir.id,{headers,data:{name:newName}});
+      assert.equal(newer.status(),200);newerState=await newer.json();
+      await route.fulfill({response});delivered.resolve();
+    }catch(error){delivered.reject(error);await route.abort();}
+  });
+  const reconciled=Promise.withResolvers();
+  await page.route(origin+'/api/state',async route=>{
+    const response=await route.fetch(),value=await response.json();
+    await route.fulfill({response});
+    if(value.pages.some(item=>item.id===offAir.id&&item.name===newName))reconciled.resolve(value);
+  });
+  // Observe visible option text, not Control's private state or render functions.
+  await page.evaluate(id=>{
+    window.controlOptionHistory=[];
+    const picker=document.querySelector('#page-select');
+    const observer=new MutationObserver(()=>window.controlOptionHistory.push(
+      Array.from(picker.options).find(option=>option.value===id)?.textContent));
+    observer.observe(picker,{childList:true,subtree:true,characterData:true});
+    window.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
+  },offAir.id);
+  await page.getByRole('button',{name:'Đổi tên trang',exact:true}).click();
+  await page.getByLabel('Tên trang',{exact:true}).fill(oldName);
+  await page.getByRole('button',{name:'Lưu tên',exact:true}).click();
+  await delivered.promise;const refreshed=await reconciled.promise;
+  await page.waitForFunction(()=>!document.querySelector('#rename-page-dialog').open&&!document.querySelector('#rename-page').disabled);
+  assert.ok(refreshed.revision>mutationState.revision);
+  assert.equal(refreshed.revision,newerState.revision);
+  assert.equal((await state(page)).current_page_id,before.current_page_id);
+  assert.equal(await page.locator('#page-select').inputValue(),offAir.id);
+  assert.ok((await page.evaluate(()=>window.controlOptionHistory)).includes(newName),'The newer HTTP state must actually reach the UI');
+  assert.deepEqual(errors,[]);
+  const displayedName=await page.locator('#page-select option').evaluateAll((options,id)=>options.find(option=>option.value===id).textContent,offAir.id);
+  assert.equal(displayedName,newName,'An older mutation response must not overwrite the already-rendered authoritative HTTP state');
+});
+
 test('Control Ending rehearsal pauses without changing pixels, resumes and replays from the beginning', {timeout:45000},async t=>{
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   t.after(()=>context.close());

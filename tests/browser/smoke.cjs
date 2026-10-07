@@ -89,6 +89,8 @@ test('Control retains its previous view when mutation commits but authoritative 
   const {page,signals,errors}=await contractControl(t);
   const before=await state(page),selected=await page.locator('#page-select').inputValue();
   const previous=before.pages.find(item=>item.id===selected).name,newName='Đã lưu nhưng chưa đồng bộ';
+  let mutations=0;
+  page.on('request',request=>{if(request.url()===origin+'/api/pages/'+selected&&request.method()==='PATCH')mutations++;});
   await page.route(origin+'/api/state',route=>route.abort('failed'));
   await page.getByRole('button',{name:'Đổi tên trang',exact:true}).click();
   await page.getByLabel('Tên trang',{exact:true}).fill(newName);
@@ -100,12 +102,19 @@ test('Control retains its previous view when mutation commits but authoritative 
   assert.equal(await page.locator('#page-select').inputValue(),selected);
   const label=await page.locator('#page-select option').evaluateAll((options,id)=>options.find(option=>option.value===id).textContent,selected);
   assert.equal(label,(selected===before.current_page_id?'● ':'')+previous);
-  // Capture current behavior, not a decision about the desired failure UX.
-  assert.equal(await page.locator('#notice').textContent(),'Đã đổi tên trang.');
+  assert.equal(await page.locator('#notice').textContent(),'Đã lưu trên máy chủ nhưng giao diện chưa đồng bộ.');
+  assert.ok(await page.locator('#rename-sync-message').isVisible());
   const after=await state(page);
   assert.equal(after.pages.find(item=>item.id===selected).name,newName);
   assert.equal(after.revision,before.revision+1);
   assert.equal(after.current_page_id,before.current_page_id);
+  await page.locator('#cancel-rename').click();
+  await page.unroute(origin+'/api/state');
+  await page.getByRole('button',{name:'Đồng bộ lại',exact:true}).click();
+  await page.locator('#sync-warning').waitFor({state:'hidden'});
+  assert.match(await page.locator('#page-select option:checked').textContent(),new RegExp(newName));
+  assert.equal(mutations,1,'Recovery fetches state, never resends the successful mutation');
+  assert.equal((await state(page)).revision,after.revision);
   assert.deepEqual(errors,[]);
 });
 
@@ -143,6 +152,9 @@ test('Control preview selection survives mutation and repeated WebSocket reconci
   await page.waitForFunction(({id,name})=>Array.from(document.querySelector('#page-select').options).find(option=>option.value===id)?.textContent==='● '+name,{id:live,name});
   assert.equal(await picker.inputValue(),first);
   assert.equal(await page.locator('#stage-title').textContent(),'Bản xem trước trang');
+  assert.equal(await page.locator('#live-page-name').textContent(),name);
+  assert.equal(await page.locator('#editing-status').textContent(),'Ngoài màn chiếu');
+  assert.match(await page.locator('#cell-context').textContent(),/Ô 01 của trang đang chỉnh/);
   assert.deepEqual(await picker.locator('option').evaluateAll(options=>options.map(option=>option.value)),authoritative.pages.map(item=>item.id));
   assert.equal((await state(page)).current_page_id,live);
   await page.unroute(origin+'/api/state');
@@ -154,6 +166,7 @@ test('Control preview selection survives mutation and repeated WebSocket reconci
   await page.getByRole('button',{name:'Chiếu trang',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#show-page').textContent==='Đang chiếu');await signals.next();
   assert.equal((await state(page)).current_page_id,second);assert.equal(await picker.inputValue(),second);
+  assert.equal(await page.locator('#editing-status').textContent(),'Cùng trang đang chiếu');
   // Deleting the live page is the documented exception: select/project a fallback.
   page.once('dialog',dialog=>dialog.accept());
   await page.getByRole('button',{name:'Xóa trang',exact:true}).click();
@@ -642,4 +655,219 @@ test('two Displays finish the real 20-second Ending identically after SIGKILL/re
   for(const page of pages)await page.getByLabel('Dấu Ấn tập thể',{exact:true}).waitFor({state:'hidden'});
   const normal=await state(pages[0]);assert.equal(normal.ending,undefined);assert.equal(normal.current_page_id,original.current_page_id);
   assert.equal(normal.drawings.length,original.drawings.length);assert.equal(navigations,0);assert.deepEqual(errors,[]);
+});
+
+test('Control library keeps unchanged artwork images and focus across reconciliation and selection, and actions use the current preview', {timeout:30000},async t=>{
+  const {page,headers,signals,errors}=await contractControl(t);
+  const submitted=await page.request.post(origin+'/api/drawings',{multipart:{submission_id:require('node:crypto').randomUUID().replaceAll('-',''),strokes:JSON.stringify({version:2,profile:'led-2px',strokes:[{erase:false,material:'mono-v1',width:2,points:[[100,100,.5],[500,500,.5]]}]})}});
+  assert.equal(submitted.status(),201);const drawing=await submitted.json();
+  const firstResponse=await page.request.post(origin+'/api/pages',{headers,data:{}});assert.equal(firstResponse.status(),200);
+  const first=await firstResponse.json();
+  const firstId=first.pages.at(-1).id;
+  const secondResponse=await page.request.post(origin+'/api/pages',{headers,data:{}});assert.equal(secondResponse.status(),200);
+  const second=await secondResponse.json();
+  const secondId=second.pages.at(-1).id,live=second.current_page_id;
+  await page.request.patch(origin+'/api/settings',{headers,data:{paused:true}});
+  async function reconcile(){
+    const fetched=page.waitForResponse(r=>r.url()===origin+'/api/state'&&r.ok());
+    signals.socket.send(JSON.stringify({type:'state_changed'}));await fetched;
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  }
+  await reconcile();await page.locator('#library-search').fill(drawing.id);
+  await page.locator('#page-select').selectOption(firstId);
+  const image=page.locator('#library img');await image.waitFor();
+  await image.evaluate(node=>{window.retainedLibraryImage=node;});
+  await page.getByRole('button',{name:'Thêm vào yêu thích',exact:true}).focus();
+  const rename=await page.request.patch(origin+'/api/pages/'+firstId,{headers,data:{name:'Library reconciliation contract'}});
+  assert.equal(rename.status(),200);await reconcile();
+  assert.equal(await image.evaluate(node=>node===window.retainedLibraryImage),true,'An unrelated authoritative refresh must not replace unchanged artwork images');
+  assert.equal(await page.getByRole('button',{name:'Thêm vào yêu thích',exact:true}).evaluate(node=>node===document.activeElement),true);
+  await page.request.patch(origin+'/api/settings',{headers,data:{rotation_seconds:13}});await reconcile();
+  assert.equal(await image.evaluate(node=>node===window.retainedLibraryImage),true);
+  await page.locator('#page-select').selectOption(secondId);
+  await page.locator('#led-cell-select').selectOption('4');
+  assert.equal(await image.evaluate(node=>node===window.retainedLibraryImage),true);
+  const add=page.waitForResponse(r=>r.url()===origin+'/api/pages/'+secondId+'/items'&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'＋ Thêm vào ô 5',exact:true}).click();assert.equal((await add).status(),200);
+  await page.getByRole('button',{name:'Đang ở ô 5',exact:true}).waitFor();
+  assert.equal(await image.evaluate(node=>node===window.retainedLibraryImage),true,'Membership changes update the existing artwork card rather than resetting its image');
+  const after=await state(page);
+  assert.deepEqual(after.pages.find(p=>p.id===secondId).cells[4].drawing_ids,[drawing.id]);
+  assert.ok(!after.pages.find(p=>p.id===firstId).cells.some(c=>c.drawing_ids.includes(drawing.id)));
+  assert.equal(after.current_page_id,live);assert.deepEqual(errors,[]);
+});
+
+test('Control library invalidates favorite, archive, membership, active visibility and filters without stale actions', {timeout:30000},async t=>{
+  const {page,headers,signals,errors}=await contractControl(t),drawings=[];
+  for(let i=0;i<2;i++){
+    const response=await page.request.post(origin+'/api/drawings',{multipart:{submission_id:require('node:crypto').randomUUID().replaceAll('-',''),strokes:JSON.stringify({version:2,profile:'led-2px',strokes:[{erase:false,material:'mono-v1',width:2,points:[[120,120+i*40,.5],[540,540,.5]]}]})}});
+    assert.equal(response.status(),201);drawings.push(await response.json());
+  }
+  const createdResponse=await page.request.post(origin+'/api/pages',{headers,data:{}});assert.equal(createdResponse.status(),200);
+  const created=await createdResponse.json(),id=created.pages.at(-1).id,live=created.current_page_id;
+  await page.request.patch(origin+'/api/settings',{headers,data:{paused:true}});
+  async function reconcile(){const fetched=page.waitForResponse(r=>r.url()===origin+'/api/state'&&r.ok());signals.socket.send(JSON.stringify({type:'state_changed'}));await fetched;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));}
+  await reconcile();await page.locator('#page-select').selectOption(id);
+  const search=page.locator('#library-search');await search.fill(drawings[0].id);
+  await page.getByRole('button',{name:'＋ Thêm vào ô 1',exact:true}).click();await page.getByRole('button',{name:'Đang ở ô 1',exact:true}).waitFor();
+  await page.locator('#led-cell-select').selectOption('1');
+  await page.getByRole('button',{name:'Chuyển vào ô 2',exact:true}).click();await page.getByRole('button',{name:'Đang ở ô 2',exact:true}).waitFor();
+  assert.match(await page.locator('#library .library-meta').textContent(),/Ô 2/);
+  await search.fill(drawings[1].id);
+  await page.getByRole('button',{name:'＋ Thêm vào ô 2',exact:true}).click();await page.getByRole('button',{name:'Đang ở ô 2',exact:true}).waitFor();
+  const showSecond=await page.request.patch(origin+'/api/pages/'+id+'/cells/1',{headers,data:{drawing_id:drawings[1].id}});assert.equal(showSecond.status(),200);await reconcile();
+  await page.locator('#only-visible').check();await search.fill(drawings[0].id);
+  assert.equal(await page.locator('#library article').count(),0);
+  const activated=await page.request.patch(origin+'/api/pages/'+id+'/cells/1',{headers,data:{drawing_id:drawings[0].id}});assert.equal(activated.status(),200);await reconcile();
+  await page.locator('#library .on-stage').waitFor();
+  await page.getByRole('button',{name:'Thêm vào yêu thích',exact:true}).click();await page.getByRole('button',{name:'Bỏ khỏi yêu thích',exact:true}).waitFor();
+  await page.getByRole('button',{name:'♥ Yêu thích',exact:true}).click();
+  assert.equal(await page.locator('#library a[download]').getAttribute('download'),drawings[0].id+'.svg');
+  await page.getByRole('button',{name:'Bỏ khỏi yêu thích',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#library-count').textContent==='0');
+  await page.locator('#show-active').click();await page.getByRole('button',{name:'Thêm vào yêu thích',exact:true}).waitFor();
+  await page.locator('#library button[popovertarget]').click();
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Cất đi',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#library-count').textContent==='0');
+  await page.locator('#only-visible').uncheck();await page.locator('#show-trash').click();
+  await page.getByRole('button',{name:'Khôi phục',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#library-count').textContent==='0');
+  await page.locator('#show-active').click();await page.getByRole('button',{name:'＋ Thêm vào ô 2',exact:true}).waitFor();
+  await search.fill('unmatched-library-search');
+  await page.getByRole('button',{name:'Đăng xuất',exact:true}).click();
+  await search.fill(drawings[0].id);
+  assert.ok(await page.locator('#library [data-admin]').evaluateAll(nodes=>nodes.length>0&&nodes.every(node=>node.disabled)),'Reattached cached mutation actions must respect the current logged-out state');
+  assert.equal((await state(page)).current_page_id,live);assert.deepEqual(errors,[]);
+});
+
+test('Control paginates the complete ordered library, searches beyond the mounted page and keeps later-page actions authoritative', {timeout:60000},async t=>{
+  const {page,headers,signals,errors}=await contractControl(t);
+  for(let i=0;i<150;i++){
+    const response=await page.request.post(origin+'/api/drawings',{multipart:{submission_id:require('node:crypto').randomUUID().replaceAll('-',''),
+      strokes:JSON.stringify({version:2,profile:'led-2px',strokes:[{erase:false,material:'mono-v1',width:2,points:[[100,100,.5],[400+i,500,.5]]}]})}});
+    assert.equal(response.status(),201);
+  }
+  const response=await page.request.post(origin+'/api/pages',{headers,data:{}});assert.equal(response.status(),200);
+  const value=await response.json(),selected=value.pages.at(-1).id,live=value.current_page_id;
+  const sorted=value.drawings.filter(d=>!d.deleted).sort((a,b)=>b.created_at-a.created_at);
+  assert.ok(sorted.length>144);
+  const fetched=page.waitForResponse(r=>r.url()===origin+'/api/state'&&r.ok());
+  signals.socket.send(JSON.stringify({type:'state_changed'}));await fetched;
+  await page.locator('#page-select').selectOption(selected);
+  const paths=()=>page.locator('#library article img').evaluateAll(images=>images.map(img=>new URL(img.src).pathname));
+  assert.equal(await page.locator('#library-count').textContent(),String(sorted.length));
+  assert.deepEqual(await paths(),sorted.slice(0,72).map(d=>d.image_path));
+  await page.locator('#library-next').click();
+  assert.deepEqual(await paths(),sorted.slice(72,144).map(d=>d.image_path));
+  const drawing=sorted[73],card=page.locator('#library article').filter({has:page.getByAltText('Nét vẽ '+drawing.id.slice(0,8),{exact:true})});
+  await page.locator('#led-cell-select').selectOption('5');
+  await card.getByRole('button',{name:'＋ Thêm vào ô 6',exact:true}).click();
+  await card.getByRole('button',{name:'Đang ở ô 6',exact:true}).waitFor();
+  await card.getByRole('button',{name:'Thêm vào yêu thích',exact:true}).click();
+  await card.getByRole('button',{name:'Bỏ khỏi yêu thích',exact:true}).waitFor();
+  assert.equal((await state(page)).current_page_id,live);
+  assert.equal((await state(page)).pages.find(p=>p.id===selected).cells[5].active,drawing.id);
+  // Query finds an authoritative drawing that was not mounted on page one.
+  await page.locator('#library-search').fill('  '+drawing.id.toUpperCase()+'  ');
+  assert.equal(await page.locator('#library-count').textContent(),'1');
+  assert.deepEqual(await paths(),[drawing.image_path]);
+  assert.equal(await page.locator('#library-page').textContent(),'1 / 1');
+  await page.locator('#only-visible').check();assert.deepEqual(await paths(),[drawing.image_path]);
+  await page.locator('#led-cell-select').selectOption('7');assert.deepEqual(await paths(),[drawing.image_path],'Active filter means active artwork on the selected page, not the selected cell');
+  await page.locator('#show-favorites').click();assert.deepEqual(await paths(),[drawing.image_path]);
+  assert.equal(await card.locator('a[download]').getAttribute('download'),drawing.id+'.svg');
+  await page.locator('#only-visible').uncheck();await page.locator('#show-active').click();
+  await card.locator('button[popovertarget]').click();
+  page.once('dialog',d=>d.accept());await card.getByRole('button',{name:'Cất đi',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#library-count').textContent==='0');
+  await page.locator('#show-trash').click();await card.getByRole('button',{name:'Khôi phục',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#library-count').textContent==='0');
+  await page.locator('#show-active').click();await page.locator('#library-search').fill('');
+  assert.deepEqual(await paths(),sorted.slice(0,72).map(d=>d.image_path));
+  assert.equal(await page.locator('#library-count').textContent(),String(sorted.length));
+  assert.equal((await state(page)).current_page_id,live);assert.deepEqual(errors,[]);
+});
+
+test('Control filters all artwork before paging, resets later pages and exposes an accessible clear-filter action', {timeout:30000},async t=>{
+  const {page,errors}=await contractControl(t),value=await state(page);
+  const sorted=value.drawings.filter(d=>!d.deleted).sort((a,b)=>b.created_at-a.created_at);
+  const paths=()=>page.locator('#library article img').evaluateAll(nodes=>nodes.map(n=>new URL(n.src).pathname));
+  assert.ok(sorted.length>72);
+  while(await page.locator('#library-next').isEnabled())await page.locator('#library-next').click();
+  await page.locator('#only-visible').check();
+  const active=new Set(value.pages.find(p=>p.id===value.current_page_id).cells.map(c=>c.active));
+  const visible=sorted.filter(d=>active.has(d.id));
+  assert.equal(await page.locator('#library-count').textContent(),String(visible.length));
+  assert.deepEqual(await paths(),visible.map(d=>d.image_path));
+  assert.equal(await page.locator('#library-page').textContent(),'1 / 1');
+  assert.ok(await page.locator('#library-next').isDisabled());
+  await page.locator('#only-visible').uncheck();
+  await page.locator('#library-search').fill(' 0 ');
+  const matching=sorted.filter(d=>d.id.toLowerCase().includes('0'));
+  assert.equal(await page.locator('#library-count').textContent(),String(matching.length));
+  assert.deepEqual(await paths(),matching.slice(0,72).map(d=>d.image_path));
+  await page.getByRole('button',{name:'Bỏ lọc',exact:true}).click();
+  assert.equal(await page.locator('#library-search').inputValue(),'');
+  assert.ok(await page.locator('#library-search').evaluate(n=>n===document.activeElement));
+  assert.deepEqual(await paths(),sorted.slice(0,72).map(d=>d.image_path));
+  assert.equal(await page.locator('#active-count').textContent(),String(sorted.length));
+  assert.deepEqual(errors,[]);
+});
+
+test('Control saved-moment refresh failure stays visible and retry does not create a second snapshot', {timeout:30000},async t=>{
+  const {page,errors}=await contractControl(t),before=await state(page);
+  let writes=0;
+  page.on('request',request=>{if(request.url()===origin+'/api/snapshots'&&request.method()==='POST')writes++;});
+  await page.route(origin+'/api/state',route=>route.abort('failed'));
+  const saved=page.waitForResponse(r=>r.url()===origin+'/api/snapshots'&&r.request().method()==='POST'&&r.ok());
+  await page.getByRole('button',{name:'Lưu khoảnh khắc',exact:true}).click();await saved;
+  await page.locator('#sync-warning').waitFor({state:'visible'});
+  const after=await state(page);assert.equal(after.snapshots.length,before.snapshots.length+1);
+  assert.equal(await page.locator('#notice').textContent(),'Đã lưu trên máy chủ nhưng giao diện chưa đồng bộ.');
+  await page.unroute(origin+'/api/state');
+  await page.getByRole('button',{name:'Đồng bộ lại',exact:true}).click();
+  await page.locator('#sync-warning').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#snapshot-count').textContent(),`${after.snapshots.length} bố cục`);
+  assert.equal((await state(page)).snapshots.length,after.snapshots.length);
+  assert.equal((await state(page)).revision,after.revision);
+  assert.equal(writes,1);assert.deepEqual(errors,[]);
+});
+
+test('Control native keyboard actions, equal-height favorite cards and responsive controls remain usable', {timeout:30000},async t=>{
+  const {page,headers,signals,errors}=await contractControl(t);
+  const created=await page.request.post(origin+'/api/pages',{headers,data:{name:'Trang đang chỉnh có tên dài để kiểm tra bố cục trên màn hình nhỏ'}});
+  assert.equal(created.status(),200);const selected=(await created.json()).pages.at(-1).id;
+  for(let i=0;i<2;i++){
+    const response=await page.request.post(origin+'/api/drawings',{multipart:{submission_id:require('node:crypto').randomUUID().replaceAll('-',''),
+      strokes:JSON.stringify({version:2,profile:'led-2px',strokes:[{erase:false,material:'mono-v1',width:2,points:[[100,100,.5],[500,500,.5]]}]})}});
+    assert.equal(response.status(),201);
+  }
+  const fetched=page.waitForResponse(r=>r.url()===origin+'/api/state'&&r.ok());
+  signals.socket.send(JSON.stringify({type:'state_changed'}));await fetched;
+  await page.locator('#page-select').selectOption(selected);
+  const first=page.locator('#library article').first(),second=page.locator('#library article').nth(1);
+  await first.getByRole('button',{name:'Thêm vào yêu thích',exact:true}).click();
+  await first.getByRole('button',{name:'Bỏ khỏi yêu thích',exact:true}).waitFor();
+  assert.ok(Math.abs((await first.boundingBox()).height-(await second.boundingBox()).height)<1,'Download does not add a row to favorite cards');
+  const more=first.locator('button[popovertarget]');
+  await first.locator('.library-actions > button').first().focus();
+  await page.keyboard.press('Tab');assert.ok(await more.evaluate(n=>n===document.activeElement));
+  await page.keyboard.press('Space');await first.locator('[popover]').waitFor({state:'visible'});
+  await page.keyboard.press('Tab');assert.ok(await first.getByRole('button',{name:'Cất đi',exact:true}).evaluate(n=>n===document.activeElement));
+  await page.keyboard.press('Tab');assert.ok(await first.getByRole('link',{name:'Tải SVG',exact:true}).evaluate(n=>n===document.activeElement));
+  await page.keyboard.press('Escape');await first.locator('[popover]').waitFor({state:'hidden'});
+  assert.ok(await more.evaluate(n=>n===document.activeElement),'Escape returns native focus to the opener');
+  const skip=page.getByRole('link',{name:'Đến bàn điều khiển',exact:true});
+  await skip.focus();await page.keyboard.press('Enter');
+  assert.ok(await page.locator('#projection-panel').evaluate(n=>n===document.activeElement));
+  for(const [width,height] of [[320,640],[375,812],[768,1024],[1024,768],[1440,1000],[667,375]]){
+    await page.setViewportSize({width,height});
+    const geometry=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,
+      controls:['#rename-page','#delete-page','#snapshot-button','#library-prev','#library-next'].map(selector=>{
+        const r=document.querySelector(selector).getBoundingClientRect();return {selector,width:r.width,height:r.height};
+      }),cards:document.querySelectorAll('#library article').length}));
+    assert.ok(geometry.scroll<=geometry.width,`No horizontal scroll at ${width}×${height}`);
+    assert.ok(geometry.cards<=72);
+    for(const control of geometry.controls)assert.ok(control.width>=44&&control.height>=44,`${control.selector} touch target at ${width}`);
+    await page.locator('#library-search').focus();
+    await page.keyboard.press('Tab');assert.ok(await page.locator('#only-visible').evaluate(n=>n===document.activeElement));
+  }
+  assert.deepEqual(errors,[]);
 });

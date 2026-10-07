@@ -84,6 +84,13 @@ export class EndingControl{
     this.$('ending-preview-count').options[0].textContent='Nét thật ('+count+' hình)';
     const ready=e?.ready_displays?.length||0;
     this.$('ending-state').textContent=!e?'Chưa chuẩn bị':e.start_time?(e.phase==='LOCKED'?'Đã khắc':'Đang chiếu'):ready?'Sẵn sàng':'Đang tải trên LED';
+    this.$('ending-step-prepare').classList.toggle('complete',!!e);
+    this.$('ending-step-ready').classList.toggle('complete',!!ready||!!e?.start_time);
+    this.$('ending-step-start').classList.toggle('complete',!!e?.start_time);
+    this.$('ending-next-action').textContent=!e
+      ? !count?'Thêm nét thật vào trang đang chiếu trước khi chuẩn bị.':!this.custom?'Chọn ảnh đích, xem thử rồi chuẩn bị LED.':'Có thể xem thử riêng hoặc chuẩn bị LED.'
+      : !e.start_time?ready?'LED đã sẵn sàng. Bấm Bắt đầu trên LED khi đến thời điểm kết thúc.':'Đợi màn chiếu tải xong. Nếu chưa sẵn sàng, kiểm tra trang Display đang mở.'
+      :'Dấu Ấn đã phát trên LED. Về trình chiếu để kết thúc và trở lại trang thường.';
     this.$('ending-prepare').toggleAttribute('data-locked',!!e||!!this.uploading||!this.custom||!count);
     this.$('ending-start').toggleAttribute('data-locked',!e||!!e.start_time||!ready);
     this.$('ending-reset').toggleAttribute('data-locked',!e);

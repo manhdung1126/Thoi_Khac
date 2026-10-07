@@ -7,6 +7,11 @@ const $ = selector => document.querySelector(selector);
 let state;
 // Local Control UI; selection and in-progress inputs are not server state.
 let busy = false, libraryView = "active", selectedCell = 0, selectedPageId, notificationTimer;
+const LIBRARY_PAGE_SIZE = 72;
+let libraryPage = 0;
+let pendingSync = false, connectionStatus = { connected: false, message: "Đang kết nối…" };
+// Renderer-only cache: one card per drawing still in authoritative state.
+const libraryCards = new Map();
 
 function notice(message, error = false) {
   const node = $("#notice");
@@ -20,6 +25,35 @@ function notice(message, error = false) {
 function access() {
   document.querySelectorAll("[data-admin]").forEach(node => { node.disabled = busy || !getToken() || node.hasAttribute("data-locked"); });
   $("#login-button").textContent = getToken() ? "Đăng xuất" : "Đăng nhập";
+  $("#sync-retry").disabled = busy;
+}
+
+function renderConnectionStatus(status = connectionStatus) {
+  connectionStatus = status;
+  const node = $("#connection-status");
+  node.textContent = pendingSync ? `Chưa đồng bộ · ${status.message}` : status.message.replace("Mất kết nối — đang nối lại…", "Đang nối lại…");
+  node.classList.toggle("connected", status.connected && !pendingSync);
+  node.classList.toggle("stale", pendingSync || !status.connected && !status.message.includes("nối lại"));
+}
+
+async function refreshAfterSave(message) {
+  const refreshed = await subscription.refresh();
+  if (refreshed) notice(message);
+  else {
+    pendingSync = true;
+    $("#sync-warning").hidden = false;
+    $("#rename-sync-message").hidden = !$("#rename-page-dialog").open;
+    notice("Đã lưu trên máy chủ nhưng giao diện chưa đồng bộ.", true);
+    $("#notice").classList.add("warning");
+    renderConnectionStatus();
+  }
+  return refreshed;
+}
+
+async function refreshView() {
+  $("#sync-retry").disabled = true;
+  try { await subscription.refresh(); }
+  finally { $("#sync-retry").disabled = busy; }
 }
 
 function openLogin() {
@@ -40,7 +74,7 @@ async function mutate(path, method = "POST", body = {}, message = "Đã cập nh
   try {
     await api(path, { method, body: method === "DELETE" ? undefined : body, auth: true });
     // The subscription applies HTTP state before refresh resolves.
-    const refreshedState = await subscription.refresh(); notice(message); return refreshedState;
+    return await refreshAfterSave(message);
   } catch (error) {
     notice(error.message, true);
     if (error.status === 401) openLogin();
@@ -76,7 +110,8 @@ function renderCells() {
   }
   select.value = String(selectedCell);
   stage.selectCell(selectedCell);
-  $("#library-target").textContent = `Thêm nét vẽ vào ô ${String(selectedCell + 1).padStart(2, "0")}`;
+  $("#library-target").textContent = `${currentPage()?.name || "Trang đang chỉnh"} · Ô ${String(selectedCell + 1).padStart(2, "0")}`;
+  $("#cell-context").textContent = `Ô ${String(selectedCell + 1).padStart(2, "0")} của trang đang chỉnh`;
   const cell = cells[selectedCell];
   $("#led-cell-count").textContent = `${cell?.drawing_ids.length || 0} hình`;
   const queue = $("#led-queue"); queue.replaceChildren();
@@ -99,8 +134,13 @@ function renderCells() {
 
 function renderLibrary() {
   if (!state) return;
-  const host = $("#library"); host.replaceChildren();
+  const host = $("#library");
   const query = $("#library-search").value.trim().toLowerCase();
+  for (const [selector, value] of [["#active-count", state.drawings.filter(d => !d.deleted).length], ["#favorite-count", state.drawings.filter(d => !d.deleted && d.favorite).length], ["#trash-count", state.drawings.filter(d => d.deleted).length]]) {
+    const node = $(selector);
+    if (node.textContent !== String(value)) node.textContent = value;
+  }
+  $("#clear-library-filter").disabled = !$("#library-search").value && !$("#only-visible").checked;
   const page = currentPage(), cells = page?.cells || [];
   const membership = new Map(cells.flatMap(cell => cell.drawing_ids.map(id => [id, cell.id])));
   const visible = new Set(cells.map(cell => cell.active).filter(Boolean));
@@ -108,19 +148,74 @@ function renderLibrary() {
     const inFolder = libraryView === "trash" ? Boolean(drawing.deleted) : !drawing.deleted && (libraryView !== "favorites" || drawing.favorite);
     return inFolder && drawing.id.toLowerCase().includes(query) && (!$("#only-visible").checked || visible.has(drawing.id));
   }).slice().sort((a, b) => b.created_at - a.created_at);
-  $("#library-count").textContent = drawings.length;
+  const count = $("#library-count");
+  if (count.textContent !== String(drawings.length)) count.textContent = drawings.length;
+  const pages = Math.max(1, Math.ceil(drawings.length / LIBRARY_PAGE_SIZE));
+  const validPage = Math.min(libraryPage, pages - 1);
+  if (libraryPage !== validPage) host.scrollTop = 0;
+  libraryPage = validPage;
+  const mounted = drawings.slice(libraryPage * LIBRARY_PAGE_SIZE, (libraryPage + 1) * LIBRARY_PAGE_SIZE);
+  const pageLabel = `${libraryPage + 1} / ${pages}`;
+  const rangeLabel = drawings.length ? `${libraryPage * LIBRARY_PAGE_SIZE + 1}-${libraryPage * LIBRARY_PAGE_SIZE + mounted.length} / ${drawings.length} hình` : "0 hình";
+  if ($("#library-page").textContent !== pageLabel) $("#library-page").textContent = pageLabel;
+  if ($("#library-range").textContent !== rangeLabel) $("#library-range").textContent = rangeLabel;
+  $("#library-prev").disabled = libraryPage === 0;
+  $("#library-next").disabled = libraryPage === pages - 1;
+  const available = new Set(state.drawings.map(drawing => drawing.id));
+  for (const [id, entry] of libraryCards) {
+    if (!available.has(id)) { entry.card.remove(); libraryCards.delete(id); }
+  }
   if (!drawings.length) {
     const empty = document.createElement("p"); empty.className = "empty";
-    empty.textContent = query || $("#only-visible").checked ? "Không có hình khớp bộ lọc." : libraryView === "trash" ? "Thùng rác đang trống." : libraryView === "favorites" ? "Chưa có nét vẽ yêu thích." : "Chưa có nét vẽ.";
-    host.append(empty);
+    empty.textContent = query || $("#only-visible").checked ? "Không có hình khớp. Thử mã ngắn hơn hoặc chọn Bỏ lọc." : libraryView === "trash" ? "Thùng rác đang trống." : libraryView === "favorites" ? "Chọn trái tim trên hình để lưu vào Yêu thích." : "Nét vẽ của khách sẽ xuất hiện ở đây.";
+    host.replaceChildren(empty); return;
   }
-  for (const drawing of drawings) {
+  const retained = new Set(mounted.map(drawing => drawing.id));
+  for (const [id, entry] of libraryCards) {
+    if (!retained.has(id) && entry.card.parentNode === host) entry.card.remove();
+  }
+  host.querySelector(".empty")?.remove();
+  // An empty result host can be populated off-DOM and inserted once.
+  const batch = host.childElementCount ? null : document.createDocumentFragment();
+  let previous;
+  for (const drawing of mounted) {
+    // Asset/favorite/folder changes rebuild a card; page/cell context only
+    // updates its labels and state. Revision/runtime are never cache keys.
+    const key = JSON.stringify([drawing.image_path, Boolean(drawing.favorite), libraryView]);
+    const cached = libraryCards.get(drawing.id);
+    if (cached?.key === key) {
+      const oldCell = membership.get(drawing.id), inTargetCell = oldCell === selectedCell;
+      const metaText = `#${drawing.id.slice(0, 6)}${oldCell === undefined ? "" : ` · Ô ${oldCell + 1}`}${visible.has(drawing.id) ? " (đang hiện)" : ""}`;
+      if (cached.meta.textContent !== metaText) cached.meta.textContent = metaText;
+      cached.card.classList.toggle("on-stage", visible.has(drawing.id));
+      const button = cached.target;
+      if (button) {
+        const label = inTargetCell ? `Đang ở ô ${selectedCell + 1}` : oldCell === undefined ? `＋ Thêm vào ô ${selectedCell + 1}` : `Chuyển vào ô ${selectedCell + 1}`;
+        const shortLabel = inTargetCell ? `Ở ô ${selectedCell + 1}` : oldCell === undefined ? "Thêm" : "Chuyển";
+        if (button.textContent !== shortLabel) button.textContent = shortLabel;
+        if (button.getAttribute("aria-label") !== label) button.setAttribute("aria-label", label);
+        if (button.hasAttribute("data-locked") !== inTargetCell) button.toggleAttribute("data-locked", inTargetCell);
+      }
+      for (const button of cached.buttons) {
+        const disabled = button.hasAttribute("data-locked") || busy || !getToken();
+        if (button.disabled !== disabled) button.disabled = disabled;
+      }
+      if (batch) batch.append(cached.card);
+      else {
+        const next = previous ? previous.nextElementSibling : host.firstElementChild;
+        if (next !== cached.card) host.insertBefore(cached.card, next);
+      }
+      previous = cached.card;
+      continue;
+    }
     const card = document.createElement("article"); card.className = "library-card";
     const image = document.createElement("img"); image.src = apiUrl(drawing.image_path); image.alt = `Nét vẽ ${drawing.id.slice(0, 8)}`; image.loading = "lazy";
     const meta = document.createElement("div"); meta.className = "library-meta";
-    meta.textContent = `#${drawing.id.slice(0, 6)}${membership.has(drawing.id) ? ` · Ô ${membership.get(drawing.id) + 1}` : ""}`;
+    meta.textContent = `#${drawing.id.slice(0, 6)}${membership.has(drawing.id) ? ` · Ô ${membership.get(drawing.id) + 1}` : ""}${visible.has(drawing.id) ? " (đang hiện)" : ""}`;
+    meta.title = drawing.id;
     const favorite = makeButton(drawing.favorite ? "♥" : "♡", () => mutate(`/api/drawings/${drawing.id}/favorite`, "PATCH", { favorite: !drawing.favorite }, drawing.favorite ? "Đã bỏ khỏi Yêu thích." : "Đã thêm vào Yêu thích."));
     favorite.classList.add("favorite-button");
+    favorite.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20 3.8 12A5 5 0 0 1 12 5a5 5 0 0 1 8.2 7Z"/></svg>';
     favorite.setAttribute("aria-label", drawing.favorite ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích");
     favorite.setAttribute("aria-pressed", String(Boolean(drawing.favorite)));
     favorite.title = favorite.getAttribute("aria-label");
@@ -133,7 +228,10 @@ function renderLibrary() {
       const oldCell = membership.get(drawing.id), inTargetCell = oldCell === selectedCell;
       const label = inTargetCell ? `Đang ở ô ${selectedCell + 1}` : oldCell === undefined ? `＋ Thêm vào ô ${selectedCell + 1}` : `Chuyển vào ô ${selectedCell + 1}`;
       actions.append(
-        makeButton(label, () => mutate(`/api/pages/${page.id}/items`, "POST", { drawing_id: drawing.id, cell_id: selectedCell }, oldCell === undefined ? `Đã thêm hình vào ô ${selectedCell + 1}.` : `Đã chuyển hình vào ô ${selectedCell + 1}.`), { disabled: inTargetCell }),
+        makeButton(label, () => {
+          const page = currentPage(), oldCell = page.cells.find(cell => cell.drawing_ids.includes(drawing.id))?.id;
+          return mutate(`/api/pages/${page.id}/items`, "POST", { drawing_id: drawing.id, cell_id: selectedCell }, oldCell === undefined ? `Đã thêm hình vào ô ${selectedCell + 1}.` : `Đã chuyển hình vào ô ${selectedCell + 1}.`);
+        }, { disabled: inTargetCell }),
         makeButton("Cất đi", () => { if (confirm("Cất nét vẽ này khỏi tất cả các trang? Bạn có thể khôi phục từ thùng rác.")) mutate(`/api/drawings/${drawing.id}`, "DELETE", {}, "Đã đưa hình vào thùng rác."); }, { danger: true }));
     }
     if (visible.has(drawing.id)) card.classList.add("on-stage");
@@ -141,11 +239,42 @@ function renderLibrary() {
       const download = document.createElement("a");
       download.href = apiUrl(`/api/favorites/${drawing.id}`);
       download.download = `${drawing.id}.svg`;
-      download.textContent = "↓ Tải SVG";
+      download.textContent = "Tải SVG";
       actions.append(download);
     }
-    card.append(image, favorite, meta, actions); host.append(card);
+    const target = libraryView === "trash" ? null : actions.firstElementChild;
+    if (target) {
+      target.setAttribute("aria-label", target.textContent);
+      target.textContent = membership.get(drawing.id) === selectedCell ? `Ở ô ${selectedCell + 1}` : membership.has(drawing.id) ? "Chuyển" : "Thêm";
+    }
+    const menu = document.createElement("div");
+    menu.className = "library-menu"; menu.id = `artwork-actions-${drawing.id}`;
+    menu.setAttribute("popover", "auto"); menu.setAttribute("role", "group");
+    menu.setAttribute("aria-label", `Thao tác hình #${drawing.id.slice(0, 8)}`);
+    while (actions.childElementCount > 1) menu.append(actions.children[1]);
+    const more = document.createElement("button"); more.type = "button"; more.className = "icon-button";
+    more.setAttribute("aria-label", `Thao tác khác cho hình #${drawing.id.slice(0, 8)}`);
+    more.setAttribute("popovertarget", menu.id);
+    more.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+    // Native popover owns dismissal, Escape and focus; position once on opening.
+    menu.addEventListener("beforetoggle", event => {
+      if (event.newState !== "open") return;
+      const bounds = more.getBoundingClientRect();
+      menu.style.left = `${Math.max(8, Math.min(bounds.right - 200, innerWidth - 208))}px`;
+      menu.style.top = `${Math.max(8, Math.min(bounds.bottom + 8, innerHeight - menu.childElementCount * 48 - 24))}px`;
+    });
+    actions.append(more, menu);
+    card.append(image, favorite, meta, actions);
+    libraryCards.set(drawing.id, { key, card, meta, buttons: [favorite, ...actions.querySelectorAll("[data-admin]")], target });
+    if (cached) cached.card.replaceWith(card);
+    if (batch) batch.append(card);
+    else {
+      const next = previous ? previous.nextElementSibling : host.firstElementChild;
+      if (next !== card) host.insertBefore(card, next);
+    }
+    previous = card;
   }
+  if (batch) host.append(batch);
 }
 
 function renderSnapshots() {
@@ -169,6 +298,10 @@ function renderSnapshots() {
 
 function applyAuthoritativeState(value) {
   state = value;
+  pendingSync = false;
+  $("#sync-warning").hidden = true;
+  $("#rename-sync-message").hidden = true;
+  renderConnectionStatus();
   renderControl();
 }
 
@@ -193,6 +326,10 @@ function renderControl() {
     select.value = selectedPageId;
   }
   const showing = selectedPageId === value.current_page_id;
+  $("#live-page-name").textContent = value.pages.find(item => item.id === value.current_page_id)?.name || "Trang";
+  $("#live-cycle").textContent = value.ending ? "Dấu Ấn" : value.settings.paused ? "Luân phiên đang dừng" : `Luân phiên mỗi ${value.settings.rotation_seconds} giây`;
+  $("#editing-status").textContent = showing ? "Cùng trang đang chiếu" : "Ngoài màn chiếu";
+  $("#editing-status").toggleAttribute("data-off-air", !showing);
   $(".stage-panel").toggleAttribute("data-preview", !showing);
   $("#stage-title").textContent = showing&&value.ending?.start_time?"Dấu Ấn · trực tiếp":showing ? "Trình chiếu trực tiếp" : "Bản xem trước trang";
   $("#show-page").textContent = showing ? "Đang chiếu" : "Chiếu trang";
@@ -204,12 +341,17 @@ function renderControl() {
   renderCells(); renderLibrary(); renderSnapshots(); endingControl.render(value);access();
 }
 
-const subscription = subscribeState(applyAuthoritativeState, status => { $("#connection-status").textContent = `${status.connected ? "●" : "○"} ${status.message}`; $("#connection-status").classList.toggle("connected", status.connected); });
+const subscription = subscribeState(applyAuthoritativeState, renderConnectionStatus);
 
-$("#library-search").addEventListener("input", renderLibrary);
-$("#only-visible").addEventListener("change", renderLibrary);
+function resetLibraryPage() { libraryPage = 0; $("#library").scrollTop = 0; renderLibrary(); }
+$("#library-search").addEventListener("input", resetLibraryPage);
+$("#only-visible").addEventListener("change", resetLibraryPage);
+$("#clear-library-filter").addEventListener("click", () => { $("#library-search").value = ""; $("#only-visible").checked = false; resetLibraryPage(); $("#library-search").focus(); });
+$("#library-prev").addEventListener("click", () => { libraryPage--; $("#library").scrollTop = 0; renderLibrary(); });
+$("#library-next").addEventListener("click", () => { libraryPage++; $("#library").scrollTop = 0; renderLibrary(); });
 $("#led-cell-select").addEventListener("change", event => { selectedCell = Number(event.target.value); renderCells(); renderLibrary(); });
-$("#refresh-button").addEventListener("click", () => subscription.refresh());
+$("#refresh-button").addEventListener("click", refreshView);
+$("#sync-retry").addEventListener("click", refreshView);
 $("#login-button").addEventListener("click", () => { if (getToken()) { setToken(""); access(); notice("Đã đăng xuất."); } else openLogin(); });
 $("#cancel-login").addEventListener("click", () => $("#login-dialog").close());
 $("#login-form").addEventListener("submit", async event => {
@@ -220,7 +362,7 @@ $("#login-form").addEventListener("submit", async event => {
 function showLibraryFolder(view) {
   libraryView = view;
   for (const button of document.querySelectorAll(".segmented button")) { const selected = button.id === `show-${view}`; button.classList.toggle("active", selected); button.setAttribute("aria-pressed", String(selected)); }
-  renderLibrary();
+  resetLibraryPage();
 }
 $("#show-active").addEventListener("click", () => showLibraryFolder("active"));
 $("#show-favorites").addEventListener("click", () => showLibraryFolder("favorites"));
@@ -257,7 +399,7 @@ $("#snapshot-button").addEventListener("click", async () => {
     const form = new FormData(); form.append("snapshot", blob, "snapshot.png"); form.append("name", name);
     form.append("layout", JSON.stringify(cells.map(cell => cell.active)));
     await api("/api/snapshots", { method: "POST", body: form, auth: true, timeout: 30000 });
-    await subscription.refresh(); notice("Đã lưu khoảnh khắc.");
+    await refreshAfterSave("Đã lưu khoảnh khắc.");
   } catch (error) { notice(error.message, true); }
   finally { busy = false; access(); }
 });

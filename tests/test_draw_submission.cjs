@@ -27,7 +27,7 @@ function drawingPage(responses, savedStorage, profile='') {
   Object.assign(element('#brush-preview'), {width:280,height:48,getContext:()=>({save(){},restore(){},clearRect(){},beginPath(){},arc(){},fill(){},moveTo(){},lineTo(){},quadraticCurveTo(){},stroke(){},setTransform(){},createPattern(){return {setTransform(){}};}})});
   const offscreenContext={setTransform(){},clearRect(){},drawImage(){},scale(){},fillRect(){},beginPath(){},arc(){},fill(){}};
   const sandbox = vm.createContext({
-    document: {body:{dataset:{profile},classList:{toggle(){}}},addEventListener(){},querySelector: element, querySelectorAll: selector=>selector==='[data-mono-width]'?monoButtons:[],createElement:tag=>tag==='canvas'?{width:0,height:0,getContext:()=>offscreenContext}:element(`created-${tag}`)},
+    document: {body:{dataset:{profile},classList:{toggle(){}}},addEventListener(){},querySelector: element, querySelectorAll: selector=>selector==='[data-mono-width]'?monoButtons:selector==='[data-rgb]'?['r','g','b'].map(c=>element('#rgb-'+c)):[],createElement:tag=>tag==='canvas'?{width:0,height:0,getContext:()=>offscreenContext}:element(`created-${tag}`)},
     location: {port: '8000', origin: 'http://localhost:8000'},
     crypto: require('node:crypto').webcrypto, structuredClone, Uint8Array, Uint32Array, Blob, FormData,
     window: {addEventListener() {},devicePixelRatio:2}, requestAnimationFrame:callback=>{callback();return 0;},cancelAnimationFrame(){},setInterval: () => 1, clearInterval() {},
@@ -136,6 +136,28 @@ test('five Mono levels persist and belong to each new stroke',()=>{
   assert.deepEqual(strokes.map(stroke=>stroke.ledWidth),[1,3]);
   assert.deepEqual(strokes.map(stroke=>stroke.width),[720/110,3*720/110]);
   assert.equal(JSON.parse(page.storage.get('cloud-strokes-brush-v1')).monoLevel,5);
+});
+
+test('Draw color applies only to new ink, survives draft reload/undo and keeps failed retry identical',async()=>{
+  const page=drawingPage([{status:500,body:{detail:'Retry'}},{body:{id:'saved',image_path:'/api/drawings/saved'}}]);
+  const color=page.element('#stroke-color');
+  color.handlers.input({target:{value:'#2f6972'}});page.draw();
+  color.handlers.input({target:{value:'#1264a3'}});page.draw();
+  assert.deepEqual(page.draft().strokes.map(s=>s.color),['#2F6972','#1264A3']);
+  page.element('#undo-button').handlers.click();assert.equal(page.draft().strokes.length,1);
+  page.element('#redo-button').handlers.click();
+  const rgb=['r','g','b'].map(c=>page.element('#rgb-'+c));
+  [18,52,86].forEach((value,i)=>{rgb[i].value=String(value);});rgb[0].handlers.input();
+  assert.equal(color.value,'#123456');
+  rgb[0].value='256';rgb[0].handlers.input();assert.equal(rgb[0]['aria-invalid'],'true');assert.equal(color.value,'#123456');
+  rgb[0].value='';rgb[0].handlers.input();assert.equal(color.value,'#123456');
+  rgb[0].value='18';rgb[0].handlers.input();
+  const restored=drawingPage([],page.storage);restored.draw();
+  assert.deepEqual(restored.draft().strokes.map(s=>s.color),['#2F6972','#1264A3','#123456']);
+  await page.send();await page.send();
+  assert.equal(page.vectors[0],page.vectors[1]);assert.equal(page.uploads[0],page.uploads[1]);
+  assert.deepEqual(JSON.parse(page.vectors[1]).strokes.map(s=>s.color),['#2F6972','#1264A3']);
+  assert.equal(page.ink(),false);
 });
 
 test('returning to Mono preserves an existing graphite draft and its export metadata',async()=>{

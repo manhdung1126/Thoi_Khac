@@ -2,6 +2,17 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const payload=async strokes=>(await import('../frontend/draw/submission.js')).submissionPayload(strokes);
 
+test('submission retains each Mono ink color but leaves gold and legacy serialization compatible',async()=>{
+  const result=await payload([
+    {material:'mono-v1',color:'#2f6972',ledWidth:2,points:[{x:1,y:2,p:.6}]},
+    {material:'mono-v1',color:'#E7BD00',ledWidth:2,points:[{x:3,y:4}]},
+    {color:'#1264A3',ledWidth:2,points:[{x:5,y:6}]},
+    {erase:true,color:'#2F6972',points:[{x:7,y:8}]},
+  ]);
+  assert.equal(result.strokes[0].color,'#2F6972');
+  for(const stroke of result.strokes.slice(1))assert.equal('color' in stroke,false);
+});
+
 test('submission keeps Mono coordinates, width and pressure, including zero and default pressure',async()=>{
   const result=await payload([{material:'mono-v1',ledWidth:2.5,points:[{x:0,y:720,p:0},{x:23.75,y:100.125,p:.8},{x:40,y:50}]}]);
   assert.deepEqual(result,{version:2,profile:'led-2px',strokes:[{erase:false,width:2.5,material:'mono-v1',points:[[0,720,0],[23.75,100.125,.8],[40,50,.55]]}]});

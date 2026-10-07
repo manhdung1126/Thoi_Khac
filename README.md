@@ -1,89 +1,152 @@
-# Cloud of Strokes · THỜI KHẮC
+# THỜI KHẮC
 
-Ứng dụng triển lãm: khách vẽ trên điện thoại, gửi nét lên LED và quản lý bằng Control.
-Frontend HTML/CSS/JavaScript thuần; backend FastAPI. Một server phục vụ cả giao diện, API và WebSocket.
+*Mỗi nét vẽ – một mảnh ký ức.*
 
-## Chạy ứng dụng
+THỜI KHẮC là trải nghiệm tương tác dành cho triển lãm: khách tham quan viết hoặc vẽ trên điện thoại, gửi tác phẩm lên màn LED và cùng nhau tạo nên một không gian lưu dấu ấn. Ban tổ chức quản lý nội dung trình chiếu và thực hiện phần kết bằng màn hội tụ các nét vẽ thành hình ảnh của triển lãm.
 
-Cài lần đầu từ thư mục dự án:
+| Không gian | Dành cho | Chức năng chính |
+| --- | --- | --- |
+| **Draw — Khắc nét** | Khách tham quan | Vẽ, chọn màu và gửi tác phẩm |
+| **Display — Trình chiếu** | Màn LED | Hiển thị tác phẩm, luân phiên nội dung và phát Dấu Ấn |
+| **Control — Điều khiển** | Ban tổ chức | Quản lý trang, tác phẩm, khoảnh khắc và phần kết |
+
+Tên thư mục bàn giao của ứng dụng là `cloud_of_strokes`.
+
+## Trải nghiệm của khách tham quan
+
+1. Mở đường dẫn Draw do ban tổ chức cung cấp.
+2. Vẽ trên bảng bằng ngón tay, bút cảm ứng hoặc chuột.
+3. Mở nút **Bút** để chọn một trong năm độ rộng, màu có sẵn hoặc màu tùy chọn. Có thể dùng tẩy, hoàn tác và làm lại khi cần.
+4. Bấm **Khắc** để gửi tác phẩm lên không gian chung.
+
+Sau khi gửi thành công, bảng vẽ được làm sạch để khách tiếp tục vẽ hình mới. Nếu gửi thất bại, hình vẫn được giữ để thử lại. Bản nháp được lưu trên trình duyệt của thiết bị đang vẽ; đây không phải bản sao lưu trên máy chủ.
+
+Nét vẽ có độ rộng ổn định, màu được giữ khi trình chiếu và có hiệu ứng ánh kim. Tác phẩm được lưu dưới dạng SVG nền trong suốt để có thể sử dụng tiếp trong công việc thiết kế.
+
+## Vận hành triển lãm
+
+### Chuẩn bị trước khi đón khách
+
+1. Khởi động ứng dụng trên máy điều khiển và kiểm tra các thiết bị cùng truy cập được mạng triển lãm.
+2. Mở Display trên máy nối với LED. Đưa chuột đến góc dưới bên phải để hiện nút toàn màn hình, hoặc nhấn **F**. Nhấn **Esc** để thoát.
+3. Mở Control, đăng nhập bằng mã quản trị và chọn trang cần trình chiếu.
+4. Gửi thử một nét từ điện thoại; kiểm tra màu, độ dày và vị trí trên LED thực tế.
+5. Cung cấp đường dẫn Draw cho khách tham quan. Không chia sẻ mã quản trị.
+
+### Quản lý trang và ô trình chiếu
+
+Mỗi trang có **27 ô cố định** trong phần cuộn sớ. Tác phẩm gửi mới được phân bổ ngẫu nhiên, ưu tiên các ô có ít hình nhất: 27 ô được lấp đầy lượt đầu trước khi một ô nhận hình thứ hai. Khi một ô chứa nhiều hình, các hình luân phiên bằng chuyển cảnh mờ dần. Mỗi ô có nhịp luân phiên riêng.
+
+Trong Control, người vận hành có thể:
+
+- Tạo, đặt tên và xóa trang.
+- Chọn ô để thêm, chuyển hoặc bỏ tác phẩm khỏi ô; chọn hình cần hiện ngay.
+- Điều chỉnh thời gian luân phiên và tạm dừng hoặc tiếp tục trình chiếu.
+- Tìm tác phẩm theo mã để thao tác nhanh trong kho nét vẽ.
+
+**Chọn trang chỉ mở trang đó để chỉnh sửa. Màn LED chỉ đổi trang khi bấm “Chiếu trang”.** Người vận hành có thể chuẩn bị nội dung khác mà không làm gián đoạn trang đang chiếu.
+
+### Yêu thích và thùng rác
+
+Tick trái tim để đưa tác phẩm vào mục **Yêu thích**. Ứng dụng tạo một bản sao SVG trong thư mục `backend/storage/favorites/`, thuận tiện cho việc lấy file để chỉnh sửa ngoài. Bỏ yêu thích sẽ xóa bản sao này; bản sao được giữ nếu hình gốc bị xóa vĩnh viễn.
+
+Tác phẩm đưa vào thùng rác có thể được khôi phục. **Xóa vĩnh viễn không thể hoàn tác** và sẽ gỡ tác phẩm gốc khỏi các trang có sử dụng nó, bao gồm trang khoảnh khắc. Hãy sao lưu trước khi xóa số lượng lớn.
+
+### Lưu và chiếu khoảnh khắc
+
+**Lưu khoảnh khắc** ghi lại các hình đang hiện trong từng ô của trang đang chỉnh, tạo một trang riêng và một ảnh xem trước có thể tải về. Đây là bố cục tại thời điểm lưu, không phải video và không bao gồm toàn bộ danh sách hình luân phiên trong các ô.
+
+Vào mục khoảnh khắc và bấm **Chiếu khoảnh khắc** để đưa bố cục đó lên LED. Trang khoảnh khắc dùng chung tác phẩm trong kho, không phải bản sao độc lập của từng hình. Xóa khoảnh khắc cũng xóa trang tương ứng; nếu trang đó đang chiếu, hãy chuyển sang trang khác trước.
+
+### Dấu Ấn — phần kết triển lãm
+
+1. Mở phần **Dấu Ấn** trong Control và tải ảnh đích của triển lãm lên.
+2. **Xem thử** với nét thật hoặc số lượng hình mẫu để hình dung quá trình từ trình chiếu bình thường đến hội tụ thành hình. Hình mẫu chỉ phục vụ xem thử, không được thêm vào kho tác phẩm.
+3. Bấm **Chuẩn bị LED**. Ứng dụng chốt bộ nét thật từ trang đang chiếu, gồm cả các hình trong danh sách luân phiên.
+4. Chờ LED báo sẵn sàng rồi bắt đầu phần kết.
+5. Kết thúc hoặc cần quay lại trình chiếu bình thường: dùng nút đặt lại trong phần Dấu Ấn.
+
+Trong khi phần kết đã được chuẩn bị hoặc đang phát, một số thao tác thay đổi nội dung nguồn bị khóa để giữ buổi trình chiếu nhất quán. Tác phẩm khách gửi thêm vẫn được lưu, nhưng không tham gia bộ nét đã chốt cho lần phát đó.
+
+## Thiết bị và điều kiện sử dụng
+
+- Một máy tính chạy ứng dụng, lưu dữ liệu và phục vụ các thiết bị trong triển lãm.
+- Một trình duyệt trên máy nối với màn LED; Control có thể mở trên máy này hoặc thiết bị khác cùng mạng.
+- Điện thoại hoặc máy tính bảng có trình duyệt hỗ trợ cảm ứng.
+- Mạng nội bộ ổn định, cho phép các thiết bị truy cập máy chạy ứng dụng.
+
+Bố cục LED được thiết kế cho **1536 × 768 pixel, tỷ lệ 2:1**, tương ứng màn P3 kích thước khoảng **4,6 × 2,3 m**. Cần kiểm tra cách xuất tín hiệu để nội dung không bị kéo giãn hoặc cắt mất mép. Hiệu ứng và màu sắc phải được duyệt trên màn LED thực tế, không chỉ trên màn laptop.
+
+Máy chạy ứng dụng cần luôn bật, không ngủ và còn đủ dung lượng lưu trữ. Tắt máy hoặc ngắt mạng sẽ làm gián đoạn gửi hình và cập nhật trình chiếu.
+
+## Khởi động trên máy điều khiển
+
+Các lệnh dưới đây dành cho đội kỹ thuật bàn giao, chạy từ thư mục dự án trên macOS hoặc Linux. Máy cần có Python 3.
+
+### Cài đặt lần đầu
 
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r backend/requirements.txt
 ```
 
-Khởi động:
+### Chạy thử trên một máy
 
 ```sh
 .venv/bin/python run.py
 ```
 
-- Draw: http://127.0.0.1:8000/draw/
-- Display: http://127.0.0.1:8000/display/
-- Control: http://127.0.0.1:8000/control/
-- Mã Control mặc định cho thử nghiệm: `2468`.
-- Dừng bằng Ctrl+C; thêm `--reload` khi phát triển, `--port 8001` để đổi cổng.
+Mở các địa chỉ:
 
-Điện thoại cùng Wi-Fi:
+- Trang chào: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+- Draw: [http://127.0.0.1:8000/draw/](http://127.0.0.1:8000/draw/)
+- Display: [http://127.0.0.1:8000/display/](http://127.0.0.1:8000/display/)
+- Control: [http://127.0.0.1:8000/control/](http://127.0.0.1:8000/control/)
+
+Mã quản trị mặc định **2468** chỉ dành cho thử nghiệm.
+
+### Cho điện thoại cùng mạng truy cập
+
+Đặt mã quản trị riêng trước khi sử dụng tại triển lãm. Thay giá trị minh họa trong lệnh sau bằng mã của ban tổ chức:
 
 ```sh
-CLOUD_ADMIN_PIN=ma-rieng .venv/bin/python run.py --lan
+CLOUD_ADMIN_PIN='thay-bang-ma-quan-tri-rieng' .venv/bin/python run.py --lan
 ```
 
-Dùng địa chỉ LAN được in trong terminal trên điện thoại. `127.0.0.1` chỉ truy cập chính thiết bị đang mở trang.
+Dùng địa chỉ mạng nội bộ được in khi khởi động để mở Draw trên điện thoại. `127.0.0.1` chỉ trỏ đến chính thiết bị đang mở trang, không phải máy điều khiển ở thiết bị khác.
 
-## Tính năng hiện tại
+Dừng ứng dụng bằng **Ctrl+C**. Khi khởi động lại, tiếp tục dùng cùng mã quản trị riêng. Có thể thêm `--port 8001` nếu cổng mặc định đang được sử dụng; khi đó phải cập nhật đường dẫn trên các thiết bị.
 
-- **Draw:** nét Mono line vàng đặc, đều, năm mức độ rộng, tẩy alpha, hoàn tác/làm lại, bản nháp cục bộ và gửi chống trùng. Server sinh SVG nền trong suốt và xóa bảng sau khi xác nhận thành công. Display thêm ánh kim riêng cho trình chiếu; tác phẩm graphite đã có vẫn đọc được. Chi tiết: [docs/DRAW_MATERIAL.md](docs/DRAW_MATERIAL.md).
-- **Display LED:** 1536×768, 27 ô 110×110 chia hàng 9–10–8 trong nền cuộn sớ; hình mới vào ô ngẫu nhiên, mỗi ô luân phiên danh sách bằng crossfade. Nét metallic có phản quang chuyển động.
-- **Control:** chọn/tạo trang, chọn ô và thêm/chuyển hình, hiện ngay hoặc bỏ khỏi ô, tạm dừng luân phiên, Yêu thích, thùng rác/khôi phục/xóa vĩnh viễn, lưu/tải/xóa khoảnh khắc.
-- **Dấu Ấn:** tải ảnh đích và xem thử với 27–1.500 hình ngay trong Control. Nét mẫu chỉ dùng cục bộ; chuẩn bị và phát trên LED dùng snapshot nét thật. Hướng dẫn: [docs/ENDING_CONTROL.md](docs/ENDING_CONTROL.md).
-
-## Cấu trúc
-
-```text
-run.py                  Điểm chạy duy nhất
-backend/
-  app/main.py           FastAPI, lưu trữ, xác thực, API và WebSocket
-  app/led.py            Danh sách 27 ô và kiểm tra dữ liệu đường nét
-  app/ending.py         Kiểm tra mask và chốt bộ nét Ending
-  requirements.txt      Thư viện Python
-  storage/              Dữ liệu triển lãm, không đưa vào Git
-frontend/
-  draw/                 Giao diện và xử lý bút
-  display/              Màn LED, crossfade và tài nguyên nền
-  control/              Quản trị và lưu khoảnh khắc
-  ending/               Engine hội tụ và preview chung cho Control/Display
-  shared/               API client, hình học nét, graphite, metallic và phần dùng chung
-tests/                  Kiểm thử Python và JavaScript
-docs/LED_INSTALLATION.md Thông số LED, vận hành và vị trí chỉnh cấu hình
-```
-
-Mỗi thư mục giao diện chỉ còn mã của bản chốt hiện tại. Không còn renderer tự do, chế độ bố cục cũ, video nền hay bộ tài nguyên thử nghiệm trước đây.
+Ứng dụng phục vụ trực tiếp qua mạng nội bộ. Mã quản trị không thay thế mã hóa đường truyền; chỉ sử dụng trên mạng tin cậy. Nếu cần truy cập qua Internet, đội kỹ thuật cần cấu hình HTTPS và bảo vệ truy cập trước khi công khai.
 
 ## Dữ liệu và sao lưu
 
-`backend/storage/` chứa `state.json`, SVG tác phẩm (`drawings`), dữ liệu đường nét (`vectors`), bản sao SVG yêu thích (`favorites`) và ảnh xem trước khoảnh khắc (`snapshots`). Tick tim tạo bản sao SVG; bỏ tim xóa bản sao. Bản sao vẫn được giữ nếu xóa vĩnh viễn hình gốc.
+Dữ liệu triển lãm nằm trên **máy chạy ứng dụng**, trong thư mục `backend/storage/`. Kho này chứa tác phẩm, dữ liệu nét vẽ, bản sao yêu thích, trang trình chiếu và khoảnh khắc đã lưu.
 
-Lưu khoảnh khắc tạo một trang gồm đúng hình đang hiện tại từng ô khi bấm lưu, không sao chép toàn bộ hàng đợi. Bấm “Chiếu khoảnh khắc” để chuyển sang trang đó. Xóa khoảnh khắc cũng xóa trang tương ứng; cần chuyển sang trang khác nếu đang chiếu trang này. Hình trong trang vẫn dùng chung kho tác phẩm: xóa hình khỏi kho cũng gỡ hình khỏi trang khoảnh khắc.
+Để sao lưu hoặc chuyển sang máy khác:
 
-Dừng server rồi sao lưu toàn bộ `backend/storage/` trước khi chuyển máy. Không sửa state khi server đang chạy. `.venv/` là môi trường chạy trên máy hiện tại; tạo lại khi chuyển máy, không đưa vào Git.
+1. Dừng ứng dụng.
+2. Sao chép **toàn bộ** thư mục `backend/storage/` sang nơi lưu trữ an toàn.
+3. Khi chuyển máy, cài ứng dụng rồi khôi phục nguyên thư mục dữ liệu trước khi khởi động.
+4. Mở Control để kiểm tra trang, tác phẩm và khoảnh khắc; đăng nhập lại sau khi khởi động máy chủ.
 
-## Kiểm thử
+Không xóa riêng file ảnh hoặc sửa dữ liệu bằng tay trong khi ứng dụng đang chạy. Hãy quản lý tác phẩm qua Control để thông tin và file luôn đồng bộ.
 
-```sh
-npm ci
-npx playwright install chromium
-npm test
-```
+GitHub chỉ dùng để bàn giao mã ứng dụng và tài nguyên giao diện. Dữ liệu khách tham quan, mã quản trị và bản sao lưu cần được chuyển riêng, không đưa vào kho mã công khai. Tuân thủ chính sách của triển lãm về đồng ý sử dụng và thời hạn lưu tác phẩm.
 
-Nếu đã có Google Chrome: dùng `PLAYWRIGHT_CHANNEL=chrome npm test`, không cần tải Chromium.
-Suite chạy unit → API integration → browser smoke, dùng dữ liệu tạm và server riêng,
-không tác động kho triển lãm. Xem phạm vi bảo vệ và giới hạn tại [docs/TESTING.md](docs/TESTING.md).
-Test lỗi ghi đĩa bảo vệ rollback upload: lỗi ghi SVG/vector/state không để lại
-file của lần gửi bị từ chối, giữ nguyên dữ liệu cũ và cho phép gửi lại không trùng.
-Có thể chạy E2E riêng bằng `PLAYWRIGHT_CHANNEL=chrome npm run test:smoke`.
+## Khi gặp sự cố
 
-## Chuẩn bị bản chính
+| Hiện tượng | Cách kiểm tra |
+| --- | --- |
+| Điện thoại không mở được Draw | Kiểm tra cùng mạng, đúng địa chỉ máy điều khiển, máy không ngủ và mạng không chặn kết nối giữa thiết bị. Nhờ đội kỹ thuật kiểm tra quyền truy cập mạng; không tắt toàn bộ tường lửa. |
+| Gửi hình thất bại | Giữ trang và bản vẽ, kiểm tra kết nối rồi thử lại. Không xóa dữ liệu trình duyệt khi đang cần giữ bản nháp. |
+| Trang chọn trong Control chưa hiện lên LED | Bấm “Chiếu trang”; chọn trang để chỉnh không tự thay nội dung đang chiếu. |
+| Hình không luân phiên | Kiểm tra trạng thái tạm dừng, thời gian luân phiên và ô có nhiều hơn một hình hay chưa. |
+| Không thao tác được trong Control | Kiểm tra phiên đăng nhập và trạng thái Dấu Ấn. Sau khi máy chủ khởi động lại cần đăng nhập lại. |
+| LED chưa hiện thay đổi | Kiểm tra kết nối của máy trình chiếu và tải lại Display. Nếu vẫn lỗi, ghi lại thông báo để đội kỹ thuật kiểm tra. |
 
-Cấu trúc đã được dọn; đây chưa phải xác nhận sẵn sàng triển khai công khai. Hiện ứng dụng dùng một tiến trình API, state JSON trên ổ đĩa và phiên quản trị trong bộ nhớ (restart cần đăng nhập lại). Trước vận hành chính thức: chốt nền triển lãm, đặt mã quản trị riêng, kiểm tra mạng thực tế, sao lưu dữ liệu và thử trực tiếp trên LED P3.
+Khi cần hỗ trợ, cung cấp thiết bị, trình duyệt, thao tác vừa thực hiện và ảnh chụp thông báo lỗi. Không gửi mã quản trị hoặc toàn bộ dữ liệu khách qua kênh công khai.
+
+## Tài liệu dành cho đội kỹ thuật
+
+- [Hướng dẫn kiểm thử](docs/TESTING.md): các lệnh và phạm vi kiểm tra tự động.

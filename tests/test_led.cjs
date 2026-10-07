@@ -1,4 +1,15 @@
 const test=require('node:test');const assert=require('node:assert/strict');
+test('custom metallic inks share identical Canvas/SVG stops and keep the original gold profile',async()=>{
+  const {metallicStops,metallicGold,METALLIC_GOLD}=await import('../frontend/shared/metallic.js');
+  const colors=[METALLIC_GOLD,'#B87333','#2F6972','#1264A3','#B85670','#89949D','#000000','#FFFFFF','#123456'];
+  const {execFileSync}=require('node:child_process');
+  const python=JSON.parse(execFileSync('.venv/bin/python',['-c','import json; from backend.app.led import metallic_stops; print(json.dumps([metallic_stops(c) for c in '+JSON.stringify(colors)+']))'],{encoding:'utf8'}));
+  assert.deepEqual(colors.map(metallicStops),python);
+  for(const color of colors){
+    const stops=[];metallicGold({createLinearGradient:()=>({addColorStop:(offset,ink)=>stops.push([offset,ink])})},720,color);
+    assert.deepEqual(stops,metallicStops(color));assert.equal(stops[3][1],color);
+  }
+});
 test('27 LED cells fit the new scroll paper and avoid the title, rolls and lower-left cloud',async()=>{
   const {LED,cellGeometry,SCROLL_ROWS,SCROLL_AREA}=await import('../frontend/shared/led.js');
   assert.equal(LED.width/LED.height,2);assert.equal(LED.gap,47*1536/4600);assert.equal(LED.size,110);assert.equal(LED.padding,0);

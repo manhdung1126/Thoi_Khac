@@ -30,7 +30,7 @@ export function paintLedVectors(ctx,data,color=metallicGold(ctx,LED.size)){
     for(const stroke of data.strokes){
       const width=(stroke.erase?6:(stroke.width??LED.lineWidth))/scale;
       if(stroke.material===GRAPHITE_MATERIAL)paintGraphiteStroke(ctx,{...stroke,width});
-      else paintMonoStroke(ctx,{points:stroke.points,width,color:metallicGold(ctx,720),erase:stroke.erase,
+      else paintMonoStroke(ctx,{points:stroke.points,width,color:metallicGold(ctx,720,stroke.color),erase:stroke.erase,
         opacity:!stroke.erase&&stroke.material===MONO_MATERIAL?monoOpacity(stroke.points):1});
     }
     ctx.restore();

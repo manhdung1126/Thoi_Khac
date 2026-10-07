@@ -1,0 +1,570 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T13:17:11.109Z",
+  "title": "Design System: THỜI KHẮC",
+  "extensions": {
+    "scope": {
+      "routes": [
+        "/",
+        "/draw/",
+        "/control/"
+      ],
+      "excluded": [
+        "Display renderer",
+        "Ending renderer"
+      ],
+      "identityAsset": "frontend/shared/assets/exhibition-logo.png"
+    },
+    "sourceRefs": {
+      "frontmatter": "DESIGN.md",
+      "shared": "frontend/shared/exhibition-ui.css",
+      "surfaces": [
+        "frontend/home.css",
+        "frontend/draw/style.css",
+        "frontend/control/style.css"
+      ],
+      "bindingBrief": "PRODUCT.md",
+      "directionContract": "benchmarks/unified-ui-redesign.md"
+    },
+    "tonalRampPolicy": "Diagnostic panel strips only, synthesized in OKLCH from each canonical shipping color. Eight steps from 15% to 95% lightness keep source hue/chroma; out-of-gamut samples rely on CSS gamut mapping. These ramps are not shipping palette tokens or an approved replacement palette.",
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cream paper",
+        "canonical": "#faf3db",
+        "tonalRamp": [
+          "oklch(15.00% 0.0324 93.52)",
+          "oklch(26.43% 0.0324 93.52)",
+          "oklch(37.86% 0.0324 93.52)",
+          "oklch(49.29% 0.0324 93.52)",
+          "oklch(60.71% 0.0324 93.52)",
+          "oklch(72.14% 0.0324 93.52)",
+          "oklch(83.57% 0.0324 93.52)",
+          "oklch(95.00% 0.0324 93.52)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Ivory surface",
+        "canonical": "#fffbee",
+        "tonalRamp": [
+          "oklch(15.00% 0.0176 92.68)",
+          "oklch(26.43% 0.0176 92.68)",
+          "oklch(37.86% 0.0176 92.68)",
+          "oklch(49.29% 0.0176 92.68)",
+          "oklch(60.71% 0.0176 92.68)",
+          "oklch(72.14% 0.0176 92.68)",
+          "oklch(83.57% 0.0176 92.68)",
+          "oklch(95.00% 0.0176 92.68)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Dark teal ink",
+        "canonical": "#253e40",
+        "tonalRamp": [
+          "oklch(15.00% 0.0310 202.25)",
+          "oklch(26.43% 0.0310 202.25)",
+          "oklch(37.86% 0.0310 202.25)",
+          "oklch(49.29% 0.0310 202.25)",
+          "oklch(60.71% 0.0310 202.25)",
+          "oklch(72.14% 0.0310 202.25)",
+          "oklch(83.57% 0.0310 202.25)",
+          "oklch(95.00% 0.0310 202.25)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Warm muted ink",
+        "canonical": "#71664e",
+        "tonalRamp": [
+          "oklch(15.00% 0.0385 86.22)",
+          "oklch(26.43% 0.0385 86.22)",
+          "oklch(37.86% 0.0385 86.22)",
+          "oklch(49.29% 0.0385 86.22)",
+          "oklch(60.71% 0.0385 86.22)",
+          "oklch(72.14% 0.0385 86.22)",
+          "oklch(83.57% 0.0385 86.22)",
+          "oklch(95.00% 0.0385 86.22)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "teal": {
+        "role": "primary",
+        "displayName": "Muted teal",
+        "canonical": "#306874",
+        "tonalRamp": [
+          "oklch(15.00% 0.0616 213.64)",
+          "oklch(26.43% 0.0616 213.64)",
+          "oklch(37.86% 0.0616 213.64)",
+          "oklch(49.29% 0.0616 213.64)",
+          "oklch(60.71% 0.0616 213.64)",
+          "oklch(72.14% 0.0616 213.64)",
+          "oklch(83.57% 0.0616 213.64)",
+          "oklch(95.00% 0.0616 213.64)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "gold": {
+        "role": "secondary",
+        "displayName": "Ochre gold",
+        "canonical": "#a97520",
+        "tonalRamp": [
+          "oklch(15.00% 0.1156 74.41)",
+          "oklch(26.43% 0.1156 74.41)",
+          "oklch(37.86% 0.1156 74.41)",
+          "oklch(49.29% 0.1156 74.41)",
+          "oklch(60.71% 0.1156 74.41)",
+          "oklch(72.14% 0.1156 74.41)",
+          "oklch(83.57% 0.1156 74.41)",
+          "oklch(95.00% 0.1156 74.41)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Paper divider",
+        "canonical": "#dcd0ae",
+        "tonalRamp": [
+          "oklch(15.00% 0.0472 90.89)",
+          "oklch(26.43% 0.0472 90.89)",
+          "oklch(37.86% 0.0472 90.89)",
+          "oklch(49.29% 0.0472 90.89)",
+          "oklch(60.71% 0.0472 90.89)",
+          "oklch(72.14% 0.0472 90.89)",
+          "oklch(83.57% 0.0472 90.89)",
+          "oklch(95.00% 0.0472 90.89)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "control-line": {
+        "role": "neutral",
+        "displayName": "Control stroke",
+        "canonical": "#908b76",
+        "tonalRamp": [
+          "oklch(15.00% 0.0309 96.08)",
+          "oklch(26.43% 0.0309 96.08)",
+          "oklch(37.86% 0.0309 96.08)",
+          "oklch(49.29% 0.0309 96.08)",
+          "oklch(60.71% 0.0309 96.08)",
+          "oklch(72.14% 0.0309 96.08)",
+          "oklch(83.57% 0.0309 96.08)",
+          "oklch(95.00% 0.0309 96.08)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Brick error",
+        "canonical": "#993d2d",
+        "tonalRamp": [
+          "oklch(15.00% 0.1270 31.91)",
+          "oklch(26.43% 0.1270 31.91)",
+          "oklch(37.86% 0.1270 31.91)",
+          "oklch(49.29% 0.1270 31.91)",
+          "oklch(60.71% 0.1270 31.91)",
+          "oklch(72.14% 0.1270 31.91)",
+          "oklch(83.57% 0.1270 31.91)",
+          "oklch(95.00% 0.1270 31.91)"
+        ],
+        "source": "frontend/shared/exhibition-ui.css"
+      },
+      "soft-teal": {
+        "role": "secondary",
+        "displayName": "Soft teal",
+        "canonical": "#e8edde",
+        "tonalRamp": [
+          "oklch(15.00% 0.0206 121.85)",
+          "oklch(26.43% 0.0206 121.85)",
+          "oklch(37.86% 0.0206 121.85)",
+          "oklch(49.29% 0.0206 121.85)",
+          "oklch(60.71% 0.0206 121.85)",
+          "oklch(72.14% 0.0206 121.85)",
+          "oklch(83.57% 0.0206 121.85)",
+          "oklch(95.00% 0.0206 121.85)"
+        ],
+        "source": "frontend/control/style.css"
+      },
+      "sand": {
+        "role": "secondary",
+        "displayName": "Warm sand",
+        "canonical": "#ffe1a0",
+        "tonalRamp": [
+          "oklch(15.00% 0.0886 85.90)",
+          "oklch(26.43% 0.0886 85.90)",
+          "oklch(37.86% 0.0886 85.90)",
+          "oklch(49.29% 0.0886 85.90)",
+          "oklch(60.71% 0.0886 85.90)",
+          "oklch(72.14% 0.0886 85.90)",
+          "oklch(83.57% 0.0886 85.90)",
+          "oklch(95.00% 0.0886 85.90)"
+        ],
+        "source": "frontend/control/style.css"
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Ochre warning",
+        "canonical": "#825711",
+        "tonalRamp": [
+          "oklch(15.00% 0.0978 73.29)",
+          "oklch(26.43% 0.0978 73.29)",
+          "oklch(37.86% 0.0978 73.29)",
+          "oklch(49.29% 0.0978 73.29)",
+          "oklch(60.71% 0.0978 73.29)",
+          "oklch(72.14% 0.0978 73.29)",
+          "oklch(83.57% 0.0978 73.29)",
+          "oklch(95.00% 0.0978 73.29)"
+        ],
+        "source": "frontend/control/style.css"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Welcome display",
+        "purpose": "Welcome exhibition title; portrait and short-landscape sizes remain surface-specific.",
+        "source": "frontend/home.css h1"
+      },
+      "headline": {
+        "displayName": "Operator headline",
+        "purpose": "Control page title.",
+        "source": "frontend/control/style.css h1"
+      },
+      "title": {
+        "displayName": "Operator section title",
+        "purpose": "Control section headings.",
+        "source": "frontend/control/style.css .panel-title h2"
+      },
+      "body": {
+        "displayName": "Operator body",
+        "purpose": "Base Control text; visitor invitation has a larger surface-specific role.",
+        "source": "frontend/control/style.css body"
+      },
+      "label": {
+        "displayName": "Compact label",
+        "purpose": "Operator field labels and Draw tool captions.",
+        "source": "frontend/control/style.css label; frontend/draw/style.css .floating-control span"
+      }
+    },
+    "shadows": [
+      {
+        "name": "draw-tool-panel",
+        "value": "0 8px 24px #253e401c",
+        "purpose": "Draw tool panel overlay.",
+        "source": "frontend/draw/style.css .tool-panel"
+      },
+      {
+        "name": "library-menu",
+        "value": "0 8px 24px #253e4025",
+        "purpose": "Control contextual library menu.",
+        "source": "frontend/control/style.css .library-menu"
+      },
+      {
+        "name": "operator-notice",
+        "value": "0 8px 30px #253e4025",
+        "purpose": "Control fixed notice.",
+        "source": "frontend/control/style.css .notice"
+      },
+      {
+        "name": "active-filter-underline",
+        "value": "inset 0 -2px var(--teal)",
+        "purpose": "Library active filter; an underline, not card elevation.",
+        "source": "frontend/control/style.css .segmented .active"
+      }
+    ],
+    "motion": [
+      {
+        "name": "draw-controls",
+        "value": "color .15s ease, opacity .15s ease",
+        "purpose": "Tool and submission state transitions.",
+        "source": "frontend/draw/style.css .floating-control, .carve-action"
+      },
+      {
+        "name": "draw-toolbar",
+        "value": "opacity .2s ease",
+        "purpose": "Toolbar fades during drawing.",
+        "source": "frontend/draw/style.css .top-controls"
+      },
+      {
+        "name": "tool-panel-entry",
+        "value": ".18s ease-out",
+        "purpose": "Opacity 0 to 1 and translateY(5px) to none; disabled for reduced motion.",
+        "source": "frontend/draw/style.css .tool-panel; @keyframes panel-in"
+      },
+      {
+        "name": "operator-button",
+        "value": "background .16s, border-color .16s",
+        "purpose": "Control button transitions; disabled for reduced motion.",
+        "source": "frontend/control/style.css button"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "welcome-portrait",
+        "value": "900px",
+        "condition": "max-width and portrait",
+        "source": "frontend/home.css"
+      },
+      {
+        "name": "visitor-phone",
+        "value": "600px",
+        "condition": "max-width; Draw heading stacks in portrait",
+        "source": "frontend/home.css; frontend/draw/style.css"
+      },
+      {
+        "name": "visitor-short-landscape",
+        "value": "550px",
+        "condition": "max-height and landscape",
+        "source": "frontend/home.css; frontend/draw/style.css"
+      },
+      {
+        "name": "draw-narrow-tools",
+        "value": "400px",
+        "condition": "max-width, or short landscape",
+        "source": "frontend/draw/style.css"
+      },
+      {
+        "name": "operator-wide-library",
+        "value": "1500px",
+        "condition": "min-width",
+        "source": "frontend/control/style.css"
+      },
+      {
+        "name": "operator-compact-columns",
+        "value": "1100px",
+        "condition": "max-width",
+        "source": "frontend/control/style.css"
+      },
+      {
+        "name": "operator-stacked",
+        "value": "820px",
+        "condition": "max-width",
+        "source": "frontend/control/style.css"
+      },
+      {
+        "name": "operator-phone",
+        "value": "480px",
+        "condition": "max-width",
+        "source": "frontend/control/style.css"
+      },
+      {
+        "name": "operator-short",
+        "value": "650px",
+        "condition": "max-height with min-width 821px",
+        "source": "frontend/control/style.css"
+      },
+      {
+        "name": "operator-container-margins",
+        "value": "1720px",
+        "condition": "max-width",
+        "source": "frontend/control/style.css"
+      }
+    ],
+    "focus": {
+      "outline": "3px solid var(--ex-teal)",
+      "outlineOffset": "4px",
+      "source": "frontend/shared/exhibition-ui.css"
+    },
+    "reducedMotion": {
+      "draw": "Transitions and panel animation disabled.",
+      "control": "Button transitions disabled; scroll-behavior auto.",
+      "source": "frontend/draw/style.css; frontend/control/style.css"
+    }
+  },
+  "components": [
+    {
+      "name": "Welcome action",
+      "kind": "button",
+      "refersTo": "welcome-action",
+      "description": "Native visitor entry link, with the actual arrow and active state.",
+      "html": "<a class=\"ds-begin\" href=\"/draw/\">Bắt đầu vẽ <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>",
+      "css": ".ds-begin { display: inline-flex; align-items: center; justify-content: space-between; gap: 40px; min-height: 60px; padding: 16px 28px; color: var(--ex-surface, #fffbee); background: var(--ex-teal, #306874); border-radius: var(--ex-radius, 8px); font-family: var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); font-size: 19px; font-weight: 600; text-decoration: none; } .ds-begin svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; } .ds-begin:active { background: #254f58; } .ds-begin:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; }",
+      "source": {
+        "css": "frontend/home.css",
+        "selectors": [
+          ".begin",
+          ".begin:active",
+          ".begin svg"
+        ],
+        "html": "frontend/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Draw submission",
+      "kind": "button",
+      "refersTo": "carve-action",
+      "description": "Enabled Khắc action; disabled appearance is preserved for panel inspection.",
+      "html": "<button class=\"ds-carve\" type=\"button\" aria-label=\"Khắc tác phẩm\">Khắc</button>",
+      "css": ".ds-carve { display: grid; place-items: center; min-width: 112px; width: 112px; height: 56px; padding: 8px 12px; border: 1px solid transparent; border-radius: var(--ex-radius, 8px); color: var(--ex-surface, #fffbee); background: var(--ex-teal, #306874); font-family: var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); font-size: 18px; font-weight: 600; line-height: 1.2; letter-spacing: .03em; cursor: pointer; transition: color .15s ease, opacity .15s ease; } .ds-carve:not(:disabled):active { background: #254f58; } .ds-carve:disabled { color: var(--ex-muted, #71664e); background: #e7dfc9; cursor: not-allowed; } .ds-carve:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-carve { transition: none; } }",
+      "source": {
+        "css": "frontend/draw/style.css",
+        "selectors": [
+          ".carve-action",
+          ".carve-action:disabled"
+        ],
+        "html": "frontend/draw/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Operator primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Existing Control primary action, with hover, active, disabled and focus states.",
+      "html": "<button class=\"ds-primary\" type=\"button\">Chiếu trang</button>",
+      "css": ".ds-primary { min-height: 44px; padding: 10px 14px; border: 1px solid var(--ex-control-line, #908b76); border-radius: var(--ex-radius, 8px); font: 14px/1.5 var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); cursor: pointer; transition: background .16s, border-color .16s; white-space: nowrap; color: var(--ex-surface, #fffbee); background: var(--ex-teal, #306874); border-color: var(--ex-teal, #306874); font-weight: 600; } .ds-primary:hover:not(:disabled) { background: #24535d; border-color: #24535d; } .ds-primary:active:not(:disabled) { transform: translateY(1px); } .ds-primary:disabled { opacity: .5; cursor: not-allowed; } .ds-primary:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-primary { transition: none; } }",
+      "source": {
+        "css": "frontend/control/style.css",
+        "selectors": [
+          "button",
+          ".primary"
+        ],
+        "html": "frontend/control/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Operator secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Transparent Control action with a visibly stronger control stroke.",
+      "html": "<button class=\"ds-secondary\" type=\"button\">＋ Tạo trang</button>",
+      "css": ".ds-secondary { min-height: 44px; padding: 10px 14px; border: 1px solid var(--ex-control-line, #908b76); border-radius: var(--ex-radius, 8px); font: 14px/1.5 var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); cursor: pointer; transition: background .16s, border-color .16s; white-space: nowrap; color: var(--ex-ink, #253e40); background: transparent; } .ds-secondary:hover:not(:disabled) { background: #eee6cc; border-color: var(--ex-teal, #306874); } .ds-secondary:active:not(:disabled) { transform: translateY(1px); } .ds-secondary:disabled { opacity: .5; cursor: not-allowed; } .ds-secondary:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-secondary { transition: none; } }",
+      "source": {
+        "css": "frontend/control/style.css",
+        "selectors": [
+          "button",
+          "button:hover:not(:disabled)"
+        ],
+        "html": "frontend/control/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Operator destructive action",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Actual brick-text danger variant, distinct from the teal primary.",
+      "html": "<button class=\"ds-danger\" type=\"button\">Xóa trang</button>",
+      "css": ".ds-danger { min-height: 44px; padding: 10px 14px; border: 1px solid var(--ex-control-line, #908b76); border-radius: var(--ex-radius, 8px); font: 14px/1.5 var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); cursor: pointer; transition: background .16s, border-color .16s; white-space: nowrap; color: var(--ex-danger, #993d2d); background: transparent; border-color: transparent; } .ds-danger:hover:not(:disabled) { background: #f8e6d4; border-color: #bc7560; } .ds-danger:active:not(:disabled) { transform: translateY(1px); } .ds-danger:disabled { opacity: .5; cursor: not-allowed; } .ds-danger:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-danger { transition: none; } }",
+      "source": {
+        "css": "frontend/control/style.css",
+        "selectors": [
+          "button",
+          ".danger"
+        ],
+        "html": "frontend/control/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Operator search field",
+      "kind": "input",
+      "refersTo": "input-control",
+      "description": "Native library search with its visible label and documented phone input size.",
+      "html": "<label class=\"ds-field\"><span>Tìm nét vẽ</span><input type=\"search\" placeholder=\"Tìm mã hình…\"></label>",
+      "css": ".ds-field { display: block; font: 12px/1.5 var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); color: var(--ex-muted, #71664e); } .ds-field > span { display: block; margin-bottom: 5px; } .ds-field input { display: block; width: 100%; min-height: 44px; padding: 10px 12px; color: var(--ex-ink, #253e40); background: var(--ex-surface, #fffbee); border: 1px solid var(--ex-control-line, #908b76); border-radius: var(--ex-radius, 8px); font: 14px/1.5 var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); caret-color: var(--ex-teal, #306874); } .ds-field input::placeholder { color: var(--ex-muted, #71664e); opacity: 1; } .ds-field input:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; } @media (max-width: 820px) { .ds-field input { font-size: 16px; } }",
+      "source": {
+        "css": "frontend/control/style.css",
+        "selectors": [
+          "input, select",
+          "label",
+          ".search-label"
+        ],
+        "html": "frontend/control/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Library navigation filters",
+      "kind": "nav",
+      "refersTo": "library-tabs",
+      "description": "Actual native filter buttons: pressed state and an active underline, with no pill shape.",
+      "html": "<div class=\"ds-tabs\" aria-label=\"Thư mục nét vẽ\"><button class=\"ds-tab ds-active\" type=\"button\" aria-pressed=\"true\">Tất cả</button><button class=\"ds-tab\" type=\"button\" aria-pressed=\"false\">Yêu thích</button><button class=\"ds-tab\" type=\"button\" aria-pressed=\"false\">Thùng rác</button></div>",
+      "css": ".ds-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--ex-line, #dcd0ae); } .ds-tab { flex: 1; min-height: 44px; padding: 8px 0; border: 0; border-radius: 0; background: transparent; color: var(--ex-muted, #71664e); font: 12px/1.5 var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); cursor: pointer; transition: background .16s, border-color .16s; } .ds-tab.ds-active { color: var(--ex-teal, #306874); box-shadow: inset 0 -2px var(--ex-teal, #306874); font-weight: 650; } .ds-tab:hover:not(:disabled) { color: var(--ex-teal, #306874); } .ds-tab:active:not(:disabled) { transform: translateY(1px); } .ds-tab:disabled { opacity: .5; cursor: not-allowed; } .ds-tab:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-tab { transition: none; } }",
+      "source": {
+        "css": "frontend/control/style.css",
+        "selectors": [
+          ".segmented",
+          ".segmented button",
+          ".segmented .active"
+        ],
+        "html": "frontend/control/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Stage preview container",
+      "kind": "card",
+      "refersTo": "stage-panel",
+      "description": "Actual Control container and toolbar/footer; renderer pixels are deliberately absent from this UI primitive.",
+      "html": "<section class=\"ds-stage\" aria-label=\"Xem trước màn LED\"><div class=\"ds-stage-toolbar\"><strong>Trình chiếu trực tiếp</strong></div><div class=\"ds-stage-view\" aria-label=\"Vùng xem trước\"></div><div class=\"ds-stage-bottom\"><span>Chọn ô để thêm nét</span></div></section>",
+      "css": ".ds-stage { min-width: 0; background: var(--ex-surface, #fffbee); border-radius: 6px; overflow: hidden; font-family: var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); } .ds-stage-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; } .ds-stage-toolbar > strong { color: var(--ex-teal, #306874); font-size: 13px; font-weight: 600; } .ds-stage-view { width: 100%; aspect-ratio: 2/1; background: var(--ex-paper, #faf3db); } .ds-stage-bottom { display: flex; justify-content: space-between; gap: 12px; padding: 12px 16px; color: var(--ex-muted, #71664e); font-size: 12px; }",
+      "source": {
+        "css": "frontend/control/style.css",
+        "selectors": [
+          ".stage-panel",
+          ".stage-toolbar",
+          "#live-display",
+          ".stage-bottom"
+        ],
+        "html": "frontend/control/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    },
+    {
+      "name": "Selected Draw tool",
+      "kind": "button",
+      "refersTo": "draw-tool-selected",
+      "description": "Actual Bút icon and caption; pressed, hover, disabled and focus treatments match Draw.",
+      "html": "<button class=\"ds-tool\" type=\"button\" aria-label=\"Bút\" aria-pressed=\"true\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m14.7 5.3 4 4M4 20l3.6-.8L19.4 7.4a1.4 1.4 0 0 0 0-2l-.8-.8a1.4 1.4 0 0 0-2 0L4.8 16.4 4 20Z\"/><path d=\"m13.4 7.8 2.8 2.8\"/></svg><span aria-hidden=\"true\">Bút</span></button>",
+      "css": ".ds-tool { min-width: 48px; min-height: 56px; display: grid; place-items: center; row-gap: 4px; padding: 8px; border: 1px solid transparent; border-radius: var(--ex-radius, 8px); color: var(--ex-ink, #253e40); background: transparent; font-family: var(--ex-font, \"Avenir Next\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif); cursor: pointer; transition: color .15s ease, opacity .15s ease; } .ds-tool svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; } .ds-tool span { font-size: 12px; line-height: 1; } .ds-tool[aria-pressed=\"true\"] { color: var(--ex-teal, #306874); background: #e8edde; border-color: var(--ex-teal, #306874); } .ds-tool:hover:not(:disabled) { color: var(--ex-teal, #306874); } .ds-tool:disabled { opacity: .35; cursor: not-allowed; } .ds-tool:focus-visible { outline: 3px solid var(--ex-teal, #306874); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-tool { transition: none; } }",
+      "source": {
+        "css": "frontend/draw/style.css",
+        "selectors": [
+          ".floating-control",
+          ".tool-pen"
+        ],
+        "html": "frontend/draw/index.html",
+        "adaptation": "Scoped ds- classes; token fallbacks for portable preview; native interaction/state CSS preserved. Preview contains no application runtime."
+      }
+    }
+  ],
+  "narrative": {
+    "northStar": "THỜI KHẮC — cream paper, gold and muted teal",
+    "overview": "The existing tower-and-waves identity anchors a calm, inviting, artwork-first exhibition UI. Cream paper and ivory surfaces support restrained teal controls; gold belongs to the supplied identity and operational artwork emphasis.\n\nWelcome and Draw give visitors generous space around one clear task. Control uses the same colors, system typography and focus treatment at a higher information density. This system covers `/`, `/draw/` and `/control/` only; Display and the Ending renderer retain their separate materials, motion and visual identity.",
+    "keyCharacteristics": [
+      "Existing tower-and-waves identity, cream paper, gold and muted teal.",
+      "Calm visitor surfaces; compact, precise operator surfaces.",
+      "Native controls, visible keyboard focus and restrained motion.",
+      "Artwork remains the visual center."
+    ],
+    "rules": [
+      {
+        "name": "The Scope Rule",
+        "body": "These tokens style the visitor and operator interface; never recolor the Display or Ending renderer from this document.",
+        "section": "colors"
+      },
+      {
+        "name": "The Focus Rule",
+        "body": "Keyboard focus remains a distinct teal outline (3px) with offset (4px), including on links, buttons, inputs, selects and disclosure summaries.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do reuse the supplied tower-and-waves identity and shared UI tokens.",
+      "Do keep artwork central and match density to visitors or operators.",
+      "Do retain text labels, native disabled/pressed states and visible keyboard focus.",
+      "Do preserve square canvas geometry, safe-area spacing and normal-flow feedback."
+    ],
+    "donts": [
+      "Don't apply this UI palette, typography or motion to Display or the Ending renderer.",
+      "Don't expose Control, Display, diagnostics or Ending as visitor menu destinations.",
+      "Don't paint the paper frame or UI background into transparent submitted artwork.",
+      "Don't introduce a font service, framework or decorative interaction to express this identity."
+    ]
+  }
+}

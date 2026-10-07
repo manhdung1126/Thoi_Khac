@@ -11,6 +11,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const fixtures=JSON.parse(await readFile(process.argv[2],'utf8'));
 const samples=Number(process.argv[3]||8);
 const controlOnly=process.argv.includes('--control-only');
+const endingOnly=process.argv.includes('--ending-only');
 const profileLibrary=process.argv.includes('--profile-library');
 const repeatSearch=process.argv.includes('--repeat-search');
 const searchShapes=process.argv.includes('--search-shapes');
@@ -32,10 +33,10 @@ function instrumentation(passive=false){
       if(name==='EndingPreview.prepare')bench.preview=this;
       return fn.apply(this,args);
     }finally{bench.record(name,performance.now()-start);}};},
-    wrapAsync(fn,name){return async function(...args){const start=performance.now();try{return await fn.apply(this,args);}finally{bench.record(name,performance.now()-start);}};},
+    wrapAsync(fn,name){return async function(...args){const start=performance.now();try{return await fn.apply(this,args);}finally{events.push({name,ms:performance.now()-start,start,end:performance.now(),id:name==='ending.loadArtwork'?args[0].id:undefined});}};},
     reset(keepFrame=false){events.length=longTasks.length=frames.length=0;if(!keepFrame)last=null;mutations=0;changed.clear();performance.clearResourceTimings();},
     read(){return {events:[...events],longTasks:[...longTasks],frames:[...frames],mutations,changedNodes:changed.size,
-      resources:performance.getEntriesByType('resource').filter(e=>e.name.includes('/api/')).map(e=>({url:e.name,transfer:e.transferSize,encoded:e.encodedBodySize,decoded:e.decodedBodySize,duration:e.duration}))};}
+      resources:performance.getEntriesByType('resource').filter(e=>e.name.includes('/api/')).map(e=>({url:e.name,transfer:e.transferSize,encoded:e.encodedBodySize,decoded:e.decodedBodySize,duration:e.duration,start:e.startTime,end:e.responseEnd}))};}
   };
   // Ending may load 2,700 assets. Do not silently truncate at Chrome's
   // default 250 ResourceTiming entries.
@@ -112,6 +113,18 @@ function libraryProfileSource(source){
   `;
   return source.replace(anchor,wrapper+'\n'+anchor);
 }
+function endingProfileSource(source){
+  // Response-only timers: preserve operations/order; never write frontend files.
+  const markers=[
+    ["const pixels=ctx.getImageData", "let profileStart=performance.now();const pixels=ctx.getImageData"],
+    ["  for(let y=0;y<280;y++)", "  __bench.record('asset.readback_stage',performance.now()-profileStart);profileStart=performance.now();\n  for(let y=0;y<280;y++)"],
+    ["  if(right<left)", "  __bench.record('asset.alpha_bounds',performance.now()-profileStart);profileStart=performance.now();\n  if(right<left)"],
+    ["  // Retain a compact texture", "  __bench.record('asset.material',performance.now()-profileStart);profileStart=performance.now();\n  // Retain a compact texture"],
+    ["  const ratio=160/280;", "  __bench.record('asset.texture',performance.now()-profileStart);\n  const ratio=160/280;"],
+  ];
+  for(const [from,to] of markers){assert.ok(source.includes(from),'Ending profile anchor changed: '+from);source=source.replace(from,to);}
+  return source;
+}
 async function context(browser,{instrument=true,dpr=1,passive=false}={}){
   const ctx=await browser.newContext({viewport:{width:1536,height:768},deviceScaleFactor:dpr});
   await ctx.addInitScript(instrumentation,passive);
@@ -119,6 +132,7 @@ async function context(browser,{instrument=true,dpr=1,passive=false}={}){
     const pathname=new URL(route.request().url()).pathname;
     if(!hooks[pathname])return route.continue();
     let source=await readFile(path.join(root,'frontend',pathname),'utf8');
+    if(endingOnly&&pathname==='/ending/assets.js')source=endingProfileSource(source);
     if(pathname==='/control/app.js'){
       // Decorate before listeners capture function references, including search.
       const anchor='const subscription = subscribeState';
@@ -134,6 +148,23 @@ const reset=page=>page.evaluate(()=>window.__bench.reset());
 const take=page=>page.evaluate(()=>window.__bench.read());
 const paint=page=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
 const elapsedEvents=(data,name)=>stats(data.events.filter(e=>e.name===name).map(e=>e.ms));
+function endingBreakdown(data){
+  const groups={};
+  for(const resource of data.resources){
+    const path=new URL(resource.url).pathname;
+    const category=path.startsWith('/api/strokes/')?'vector':path.startsWith('/api/drawings/')?'svg':'state_and_ack';
+    const group=groups[category]||= {requests:0,transfer_bytes:0,encoded_bytes:0,zero_transfer_entries:0,urls:new Set(),durations:[]};
+    group.requests++;group.transfer_bytes+=resource.transfer;group.encoded_bytes+=resource.encoded;
+    group.zero_transfer_entries+=resource.transfer===0?1:0;group.urls.add(path);group.durations.push(resource.duration);
+  }
+  const assets=data.events.filter(e=>e.name==='ending.loadArtwork');
+  const edges=assets.flatMap(e=>[[e.start,1],[e.end,-1]]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  let active=0,max=0;for(const [,delta] of edges){active+=delta;max=Math.max(max,active);}
+  const span=edges.length?edges.at(-1)[0]-edges[0][0]:0;
+  return {resources:Object.fromEntries(Object.entries(groups).map(([key,g])=>[key,{...g,urls:undefined,durations:undefined,unique_urls:g.urls.size,repeated_url_entries:g.requests-g.urls.size,duration:stats(g.durations)}])),
+    artwork_workers:{calls:assets.length,max_inflight:max,span_ms:span,slot_utilization:span?assets.reduce((s,e)=>s+e.ms,0)/(6*span):null},
+    note:'Resource entries are not all network transfers. Slot utilization counts async waits, not CPU. Zero transfer suggests cache; CDP asset probes independently verify it.'};
+}
 function summarize(data){
   const names=[...new Set(data.events.map(e=>e.name))],a=[...data.frames].sort((x,y)=>x-y);
   const cadence=a.length?a[Math.floor(a.length/2)]:0;
@@ -500,13 +531,21 @@ async function draw(browser,origin){
   return result;
 }
 
-async function displayEnding(browser,origin,fixture){
-  const ctx=await context(browser),page=await ctx.newPage(),errors=[];
+async function displayEnding(browser,origin,fixture,nativeCache=false){
+  const ctx=await context(browser,{instrument:!nativeCache}),page=await ctx.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(origin+'/display/');
   await page.waitForFunction(()=>document.querySelectorAll('.led-cell canvas').length===27);
   await page.waitForTimeout(1400);await reset(page);await page.waitForTimeout(4000);
   const normal=summarize(await take(page));
+  if(nativeCache)await page.evaluate(async()=>{
+    // Prototype decorators do not intercept requests or disable HTTP cache.
+    const {EndingPresentation}=await import('/ending/session.js');
+    const {EndingPreview}=await import('/ending/preview.js');
+    EndingPresentation.prototype.prepare=__bench.wrapAsync(EndingPresentation.prototype.prepare,'EndingPresentation.prepare');
+    EndingPreview.prototype.prepare=__bench.wrap(EndingPreview.prototype.prepare,'EndingPreview.prepare');
+    EndingPreview.prototype.draw=__bench.wrap(EndingPreview.prototype.draw,'EndingPreview.draw');
+  });
   const login=await page.request.post(origin+'/api/admin/login',{data:{pin:'2468'}}),token=(await login.json()).token;
   const headers={Authorization:'Bearer '+token};
   const preparations=[];
@@ -519,7 +558,13 @@ async function displayEnding(browser,origin,fixture){
     // Readiness acknowledgement may finish just after texture/trajectory creation.
     await page.waitForFunction(async()=>{const state=await (await fetch('/api/state')).json();return !!state.ending?.ready_displays?.length;},null,{timeout:10000});
     await paint(page);
-    preparations.push({ready_ms:performance.now()-start,...summarize(await take(page))});
+    const data=await take(page);
+    if(endingOnly){
+      const vectors=data.resources.filter(e=>new URL(e.url).pathname.startsWith('/api/strokes/'));
+      const svgs=data.resources.filter(e=>new URL(e.url).pathname.startsWith('/api/drawings/'));
+      assert.equal(vectors.length,fixture.count);assert.equal(svgs.length,Math.floor(fixture.count*4/5));
+    }
+    preparations.push({ready_ms:performance.now()-start,...summarize(data),...(endingOnly?{breakdown:endingBreakdown(data)}:{})});
     if(i<2){await page.request.post(origin+'/api/ending/'+session.id+'/reset',{headers});await page.waitForFunction(()=>!__bench.preview?.layout);}
   }
   const preparedState=await (await page.request.get(origin+'/api/state')).json();
@@ -547,7 +592,7 @@ async function displayEnding(browser,origin,fixture){
   await ctx.close();
   return {normal,prepare:preparations,ready:stats(preparations.map(p=>p.ready_ms)),playback,
     stages:Object.fromEntries(Object.entries(stages).map(([k,v])=>[k,stats(v.slice(2))])),errors,
-    cache:'HTTP cache disabled by isolated source instrumentation; filesystem cache warm'};
+    cache:nativeCache?'Native HTTP cache enabled: first prepare after normal LED loads 27; next two same-context reset/reprepare; no Ending texture cache':'HTTP cache disabled by isolated source instrumentation; filesystem cache warm'};
 }
 
 const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'chrome'});
@@ -558,6 +603,13 @@ try{
     try{
       console.error('Measuring browser '+fixture.name+' ('+fixture.count+' artworks)');
       const measured={name:fixture.name,count:fixture.count,health:200};
+      if(endingOnly){
+        measured.assets=await assets(browser,origin);
+        measured.displayEnding=await displayEnding(browser,origin,fixture);
+        measured.displayEndingNativeCache=await displayEnding(browser,origin,fixture,true);
+        assert.deepEqual(measured.displayEnding.errors,[]);assert.deepEqual(measured.displayEndingNativeCache.errors,[]);
+        output.workloads.push(measured);continue;
+      }
       if(auditLibraryGeometry){measured.libraryGeometry=await libraryGeometry(browser,origin);output.workloads.push(measured);continue;}
       measured.control=await control(browser,origin);
       measured.controlUnmodified=await controlUnmodified(browser,origin);

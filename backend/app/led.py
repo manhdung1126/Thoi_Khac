@@ -1,6 +1,7 @@
 """Persistent per-cell carousels; presentation geometry matches shared/led.js."""
 import json
 import math
+import re
 import secrets
 import time
 
@@ -14,6 +15,16 @@ PEN_WIDTHS = (1, 1.5, 2, 2.5, 3)
 GRAPHITE_COLOR = '#514739'
 GRAPHITE_MATERIAL = 'graphite-v1'
 MONO_MATERIAL = 'mono-v1'
+METALLIC_GOLD = '#E7BD00'
+
+
+def metallic_stops(color=METALLIC_GOLD):
+    """Matches shared/metallic.js: ink tint only, never stroke alpha/geometry."""
+    if color == METALLIC_GOLD:
+        return [(0, '#A77D16'), (.18, '#C49A0B'), (.38, '#F4D84F'), (.52, METALLIC_GOLD), (.72, '#B58B08'), (.88, '#F8DC63'), (1, '#C49A0B')]
+    channels = [int(color[i:i + 2], 16) for i in (1, 3, 5)]
+    return [(offset, '#' + ''.join(f'{math.floor((v * (1 + mix) if mix < 0 else v + (255 - v) * mix) + .5):02X}' for v in channels))
+            for offset, mix in [(0, -.30), (.18, -.15), (.38, .32), (.52, 0), (.72, -.22), (.88, .45), (1, -.15)]]
 
 
 def _number(value):
@@ -96,6 +107,10 @@ def svg_document(data):
         # mixed new artwork; existing v1 files are never rewritten.
         # Matches metallicGold() in shared/metallic.js; cross-language test locks parity.
         masks.append('<linearGradient id="legacy" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="720" y2="518.4"><stop offset="0" stop-color="#A77D16"/><stop offset=".18" stop-color="#C49A0B"/><stop offset=".38" stop-color="#F4D84F"/><stop offset=".52" stop-color="#E7BD00"/><stop offset=".72" stop-color="#B58B08"/><stop offset=".88" stop-color="#F8DC63"/><stop offset="1" stop-color="#C49A0B"/></linearGradient>')
+    colors = sorted({s['color'] for s in data['strokes'] if s.get('color') and s['color'] != METALLIC_GOLD})
+    for color in colors:
+        stops = ''.join(f'<stop offset="{_number(offset)}" stop-color="{ink}"/>' for offset, ink in metallic_stops(color))
+        masks.append(f'<linearGradient id="ink{color[1:]}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="720" y2="518.4">{stops}</linearGradient>')
     for stroke in data['strokes']:
         if stroke['erase']:
             mask_id = f'e{len(masks)}'
@@ -110,7 +125,8 @@ def svg_document(data):
             opacity = _number(.82 + .14 * pressure)
             body += f'<g opacity="{opacity}">{_shape(stroke, f"url(#p{seed})")}</g>'
         else:
-            shape = _shape(stroke, 'url(#legacy)' if data['version'] == 2 else '#FFD700')
+            ink = f'url(#ink{stroke["color"][1:]})' if stroke.get('color') in colors else 'url(#legacy)' if data['version'] == 2 else '#FFD700'
+            shape = _shape(stroke, ink)
             if stroke.get('material') == MONO_MATERIAL:
                 pressure = sum(point[2] for point in stroke['points']) / len(stroke['points'])
                 opacity = _number(math.floor((.9 + .1 * pressure) * 1000 + .5) / 1000)
@@ -119,7 +135,8 @@ def svg_document(data):
     definitions = f'<defs>{"".join(masks)}</defs>' if masks else ''
     material = (' data-material="graphite-v1"' if any(s.get('material') == GRAPHITE_MATERIAL for s in data['strokes'])
                 else ' data-material="mono-v1"' if any(s.get('material') == MONO_MATERIAL for s in data['strokes']) else '')
-    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" width="720" height="720"{material}>{definitions}{body}</svg>'.encode()
+    colored = ' data-colored="true"' if colors else ''
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" width="720" height="720"{material}{colored}>{definitions}{body}</svg>'.encode()
 
 
 def cell_geometry(cell_id):
@@ -237,6 +254,9 @@ def validate_vectors(raw):
                     raise ValueError()
                 if material == GRAPHITE_MATERIAL and (type(stroke.get('seed')) is not int or not 0 <= stroke['seed'] <= 255):
                     raise ValueError()
+            color = stroke.get('color')
+            if 'color' in stroke and (data['version'] != 2 or material != MONO_MATERIAL or stroke['erase'] or not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color)):
+                raise ValueError()
             points = stroke['points']
             if not isinstance(points, list) or not points:
                 raise ValueError()
@@ -257,6 +277,8 @@ def validate_vectors(raw):
                 item['material'] = material
                 if material == GRAPHITE_MATERIAL:
                     item['seed'] = stroke['seed']
+            if color is not None:
+                item['color'] = color.upper()
             clean.append(item)
         return {'version': data['version'], 'profile': 'led-2px', 'strokes': clean}
     except (ValueError, TypeError, KeyError, RecursionError):

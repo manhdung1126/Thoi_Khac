@@ -341,6 +341,33 @@ test('Control Ending rehearsal pauses without changing pixels, resumes and repla
   assert.deepEqual(errors,[]);
 });
 
+test('public welcome exposes only Draw; direct Control retains its PIN boundary',async t=>{
+  const context=await browser.newContext();t.after(()=>context.close());
+  const page=await context.newPage();await page.goto(origin+'/');
+  assert.equal(await page.getByRole('heading',{name:'THỜI KHẮC',exact:true}).count(),1);
+  assert.deepEqual(await page.locator('a[href]').evaluateAll(links=>links.map(link=>link.getAttribute('href'))),['/draw/']);
+  await page.getByRole('link',{name:'Bắt đầu vẽ',exact:true}).click();await page.waitForURL('**/draw/');
+  assert.equal(await page.locator('a[href*="control"],a[href*="display"],a[href*="ending"]').count(),0);
+  await page.goto(origin+'/control/');await page.locator('#login-dialog[open]').waitFor();
+  assert.equal(await page.getByRole('button',{name:/Tạo trang/}).isEnabled(),false);
+  const denied=await page.request.post(origin+'/api/pages',{data:{}});assert.equal(denied.status(),401);
+});
+
+test('Ending has no standalone product page; runtime imports and isolated Display remain available',async t=>{
+  const context=await browser.newContext();t.after(()=>context.close());const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  for(const route of ['/ending/','/ending/prototype.html'])assert.equal((await page.request.get(origin+route)).status(),404);
+  await page.goto(origin+'/draw/');
+  const imports=await page.evaluate(async()=>{
+    const {EndingPresentation}=await import('/ending/session.js');const {EndingPreview}=await import('/ending/preview.js');
+    return [typeof EndingPresentation,typeof EndingPreview];
+  });assert.deepEqual(imports,['function','function']);
+  await page.goto(origin+'/display/');await page.waitForFunction(()=>document.querySelector('#connection-status').textContent.includes('trực tiếp'));
+  assert.equal(await page.locator('link[rel="stylesheet"][href*="exhibition-ui"]').count(),0);
+  assert.equal(await page.locator('a[href*="control"],a[href*="draw"]').count(),0);
+  assert.deepEqual(errors,[]);
+});
+
 test('home → Draw; width, undo/redo, reload, failed send/retry → realtime Display and fullscreen shine', {timeout:45000},async t=>{
   const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:2});
   t.after(()=>context.close());const draw=await context.newPage(),display=await context.newPage(),errors=[];
@@ -351,7 +378,7 @@ test('home → Draw; width, undo/redo, reload, failed send/retry → realtime Di
   // Open the Display again so its actual WebSocket is observed before submission.
   await display.reload();
   await display.waitForFunction(()=>document.querySelector('#connection-status').textContent.includes('trực tiếp'));
-  await draw.goto(origin+'/');await draw.getByRole('link',{name:/Vẽ nét của bạn/}).click();
+  await draw.goto(origin+'/');await draw.getByRole('link',{name:'Bắt đầu vẽ',exact:true}).click();
   await draw.waitForURL('**/draw/');
   await draw.getByRole('button',{name:'Bút',exact:true}).click();
   const weight=draw.getByRole('button',{name:'Nét mức 5',exact:true});await weight.click();assert.equal(await weight.getAttribute('aria-pressed'),'true');
@@ -399,7 +426,7 @@ test('Control login → edit an off-air page → favorite SVG → save/project m
   // Seed through the public API, never by editing server state or storage files.
   const response=await page.request.post(origin+'/api/drawings',{multipart:{submission_id:require('node:crypto').randomUUID().replaceAll('-',''),strokes:JSON.stringify({version:2,profile:'led-2px',strokes:[{erase:false,material:'mono-v1',width:2,points:[[100,100,.5],[600,600,.5]]}]})}});
   assert.equal(response.status(),201);const drawing=await response.json();
-  await page.goto(origin+'/');await page.getByRole('link',{name:/Bàn điều khiển/}).click();await page.waitForURL('**/control/');
+  await page.goto(origin+'/control/');
   assert.equal(await page.getByRole('button',{name:/Tạo trang/}).isEnabled(),false);
   await page.getByLabel('Mã quản lý',{exact:true}).fill('2468');await page.getByRole('dialog').getByRole('button',{name:'Đăng nhập',exact:true}).click();
   await page.locator('#login-dialog').waitFor({state:'hidden'});
@@ -870,4 +897,132 @@ test('Control native keyboard actions, equal-height favorite cards and responsiv
     await page.keyboard.press('Tab');assert.ok(await page.locator('#only-visible').evaluate(n=>n===document.activeElement));
   }
   assert.deepEqual(errors,[]);
+});
+
+test('Draw palette keeps per-stroke color through draft, SVG, Control, realtime Display and metallic Ending', {timeout:45000},async t=>{
+  const {page:control,headers,signals,errors}=await contractControl(t);
+  const created=await control.request.post(origin+'/api/pages',{headers,data:{name:'Palette regression'}});
+  assert.equal(created.status(),200);const pageId=(await created.json()).pages.at(-1).id;
+  assert.equal((await control.request.post(origin+`/api/pages/${pageId}/activate`,{headers,data:{}})).status(),200);
+  const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:2});t.after(()=>context.close());
+  const draw=await context.newPage(),display=await context.newPage();
+  for(const page of [draw,display])page.on('pageerror',error=>errors.push(error.message));
+  await display.goto(origin+'/display/');
+  await display.waitForFunction(()=>document.querySelector('#connection-status').textContent.includes('trực tiếp'));
+  await draw.goto(origin+'/draw/');await draw.getByRole('button',{name:'Bút',exact:true}).click();
+  for(const [width,height] of [[1440,900],[375,812],[667,375]]){
+    await draw.setViewportSize({width,height});
+    const geometry=await draw.locator('.ink-palette').evaluate(node=>({overflow:document.documentElement.scrollWidth>innerWidth,
+      targets:[...node.querySelectorAll('button,input')].map(n=>{const b=n.getBoundingClientRect();return {width:b.width,height:b.height};})}));
+    assert.equal(geometry.overflow,false);
+    for(const target of geometry.targets)assert.ok(target.width>=44&&target.height>=44);
+    if(height>400)await draw.screenshot({path:`/tmp/draw-palette-${width}.png`});
+  }
+  await draw.setViewportSize({width:1440,height:900});
+  const box=await draw.getByLabel('Vùng vẽ của khách tham quan',{exact:true}).boundingBox();
+  for(const [name,y] of [['Xanh ngọc',.3],['Xanh lam',.6]]){
+    if(await draw.locator('#tool-panel').isHidden())await draw.getByRole('button',{name:'Bút',exact:true}).click();
+    await draw.getByRole('button',{name,exact:true}).click();
+    assert.equal(await draw.getByRole('button',{name,exact:true}).getAttribute('aria-pressed'),'true');
+    await draw.getByRole('button',{name:'Đóng tùy chỉnh bút',exact:true}).click();
+    await draw.mouse.move(box.x+box.width*.2,box.y+box.height*y);await draw.mouse.down();
+    await draw.mouse.move(box.x+box.width*.8,box.y+box.height*y,{steps:16});await draw.mouse.up();
+  }
+  const beforeColor=await canvasPixels(draw);
+  await draw.getByRole('button',{name:'Bút',exact:true}).click();
+  for(const [channel,value] of [['r','18'],['g','52'],['b','86']])await draw.locator('#rgb-'+channel).fill(value);
+  assert.equal((await draw.locator('#stroke-color').inputValue()).toUpperCase(),'#123456');
+  await draw.locator('#rgb-r').fill('256');assert.equal(await draw.locator('#rgb-r').getAttribute('aria-invalid'),'true');
+  assert.equal((await draw.locator('#stroke-color').inputValue()).toUpperCase(),'#123456');
+  await draw.locator('#rgb-r').fill('18');assert.deepEqual(await canvasPixels(draw),beforeColor);
+  await draw.locator('#stroke-color').evaluate(input=>{input.value='#123456';input.dispatchEvent(new Event('input',{bubbles:true}));});
+  assert.equal(await draw.locator('#rgb-b').inputValue(),'86');
+  await draw.getByRole('button',{name:'Đóng tùy chỉnh bút',exact:true}).click();
+  await draw.mouse.move(box.x+box.width*.2,box.y+box.height*.8);await draw.mouse.down();
+  await draw.mouse.move(box.x+box.width*.8,box.y+box.height*.8,{steps:16});await draw.mouse.up();
+  const original=await canvasPixels(draw);await draw.reload();assert.deepEqual(await canvasPixels(draw),original);
+  const submitted=draw.waitForResponse(r=>r.url()===origin+'/api/drawings'&&r.request().method()==='POST');
+  await draw.getByRole('button',{name:'Khắc tác phẩm',exact:true}).click();const response=await submitted;
+  assert.equal(response.status(),201);const drawing=await response.json();
+  const vectors=await (await draw.request.get(origin+drawing.vector_path)).json();
+  assert.deepEqual(vectors.strokes.map(s=>s.color),['#2F6972','#1264A3','#123456']);
+  const svg=await (await draw.request.get(origin+drawing.image_path)).text();
+  assert.match(svg,/data-colored="true"/);assert.match(svg,/url\(#ink2F6972\)/);assert.match(svg,/url\(#ink1264A3\)/);
+  const current=await state(draw),cell=current.pages.find(p=>p.id===pageId).cells.find(c=>c.active===drawing.id);
+  const artwork=display.locator('.led-cell').nth(cell.id).locator('canvas');await artwork.waitFor();await display.bringToFront();
+  const read=canvas=>Array.from(canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data);
+  const colored=pixels=>{
+    let teal=0,blue=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i+3]>100){
+      if(pixels[i+1]>pixels[i]+15&&Math.abs(pixels[i+2]-pixels[i+1])<30)teal++;
+      if(pixels[i+2]>pixels[i+1]+30&&pixels[i+1]>pixels[i]+15)blue++;
+    }assert.ok(teal>10&&blue>10,'Both ink colors remain distinguishable, not recolored gold');
+  };
+  const first=await artwork.evaluate(read);colored(first);
+  await display.waitForFunction(({id,previous})=>{
+    const c=document.querySelectorAll('.led-cell')[id].querySelector('canvas'),next=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    return next.some((v,i)=>i%4!==3&&v!==previous[i]);
+  },{id:cell.id,previous:first},{timeout:8000});
+  const next=await artwork.evaluate(read);colored(next);
+  for(let i=3;i<first.length;i+=4)assert.equal(next[i],first[i],'Moving reflection preserves alpha');
+  const refreshed=control.waitForResponse(r=>r.url()===origin+'/api/state'&&r.ok());
+  signals.socket.send(JSON.stringify({type:'state_changed'}));await refreshed;
+  await control.locator('#page-select').selectOption(pageId);
+  const preview=control.locator('#stage .led-cell').nth(cell.id).locator('canvas');await preview.waitFor();colored(await preview.evaluate(read));
+  await control.locator(`#library img[src$="${drawing.image_path}"]`).waitFor();
+  const ending=await display.evaluate(async drawing=>{
+    const {loadArtwork}=await import('/ending/assets.js'),{paintStrokeShine}=await import('/ending/shine.js');
+    const art=await loadArtwork(drawing,new AbortController().signal),ctx=art.canvas.getContext('2d');
+    const before=Array.from(ctx.getImageData(0,0,160,160).data);
+    paintStrokeShine(ctx,160,160,3,undefined,art.material==='metallic-color');
+    return {material:art.material,before,after:Array.from(ctx.getImageData(0,0,160,160).data)};
+  },drawing);
+  assert.equal(ending.material,'metallic-color');colored(ending.before);colored(ending.after);
+  for(let i=3;i<ending.before.length;i+=4)assert.equal(ending.after[i],ending.before[i]);
+  assert.ok(ending.after.some((v,i)=>i%4!==3&&v!==ending.before[i]));assert.deepEqual(errors,[]);
+});
+
+test('visitor layouts keep touch controls reachable, keyboard focus visible and canvas stable through send states', {timeout:45000},async t=>{
+  const context=await browser.newContext({deviceScaleFactor:2});t.after(()=>context.close());const page=await context.newPage();
+  const sizes=[[320,568],[375,812],[390,844],[768,1024],[820,1180],[1024,768],[1366,900],[844,390]];
+  for(const [width,height]of sizes){
+    await page.setViewportSize({width,height});await page.goto(origin+'/');
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`welcome ${width}`);
+    const start=page.getByRole('link',{name:'Bắt đầu vẽ',exact:true}),entry=await start.boundingBox();
+    assert.ok(entry.height>=44&&entry.y+entry.height<=height,`welcome action ${width}×${height}`);
+    await page.keyboard.press('Tab');assert.equal(await start.evaluate(node=>node===document.activeElement),true);
+    assert.equal(await start.evaluate(node=>getComputedStyle(node).outlineStyle),'solid');
+    await page.keyboard.press('Enter');await page.waitForURL('**/draw/');
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Draw ${width}`);
+    const canvas=await page.locator('#drawing-canvas').boundingBox();assert.equal(canvas.width,canvas.height);
+    assert.equal(await page.locator('.draw-header').count(),0);
+    assert.equal(await page.locator('a[href]').count(),0);
+    for(const label of ['h1','#paper-hint','#draft-status']){
+      const frame=await page.locator(label).boundingBox();assert.ok(frame.width<=1&&frame.height<=1,`no visible caption ${label} ${width}`);
+    }
+    for(const name of ['Bút','Tẩy','Hoàn tác','Làm lại','Khắc tác phẩm']){
+      const box=await page.getByRole('button',{name,exact:true}).boundingBox();
+      assert.ok(box.width>=44&&box.height>=44&&box.y>=0&&box.y+box.height<=height,`${name} ${width}×${height}`);
+      assert.ok(box.y>=canvas.y+canvas.height,`tools do not cover drawing ${name} ${width}`);
+    }
+    await page.locator('#pencil-button').click();await page.locator('#tool-panel').waitFor({state:'visible'});
+    const panel=await page.locator('#tool-panel').boundingBox(),close=await page.locator('#close-tool-panel').boundingBox();
+    assert.ok(panel.y>=0&&panel.y+panel.height<=height,`panel within screen ${width}×${height}`);
+    assert.ok(close.y>=0&&close.y+close.height<=height,`close reachable ${width}×${height}`);
+    assert.ok(await page.locator('#tool-panel').evaluate(panel=>[...panel.querySelectorAll('button,input')].every(node=>{const box=node.getBoundingClientRect();return box.width>=44&&box.height>=44;})));
+    await page.locator('#rgb-r').focus();assert.equal(await page.locator('#rgb-r').evaluate(node=>getComputedStyle(node).fontSize),'16px');
+    await page.keyboard.press('Escape');assert.equal(await page.locator('#pencil-button').evaluate(node=>node===document.activeElement),true);
+  }
+  // A shortened tablet viewport approximates keyboard space, not a physical Safari keyboard.
+  await page.setViewportSize({width:820,height:500});await page.locator('#pencil-button').click();await page.locator('#rgb-r').focus();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.keyboard.press('Escape');
+  await page.setViewportSize({width:820,height:1180});
+  const canvas=page.locator('#drawing-canvas'),box=await canvas.boundingBox();
+  await page.mouse.move(box.x+box.width*.2,box.y+box.height*.4);await page.mouse.down();await page.mouse.move(box.x+box.width*.7,box.y+box.height*.5);await page.mouse.up();
+  await page.waitForFunction(()=>!document.querySelector('#send-button').disabled);const ready=await canvas.boundingBox();
+  let release;const gate=new Promise(resolve=>{release=resolve;});
+  await page.route('**/api/drawings',async route=>{await gate;await route.abort('failed');});
+  await page.locator('#send-button').click();await page.locator('body.is-submitting').waitFor();assert.deepEqual(await canvas.boundingBox(),ready);
+  release();await page.locator('#upload-status.error').waitFor();assert.deepEqual(await canvas.boundingBox(),ready);
+  await page.unroute('**/api/drawings');await page.locator('#send-button').click();await page.locator('#upload-status.success').waitFor();
+  assert.deepEqual(await canvas.boundingBox(),ready);assert.equal(await page.locator('#send-button').isDisabled(),true);
 });

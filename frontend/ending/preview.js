@@ -21,6 +21,7 @@ export class EndingPreview{
       plan,art:artworks.get(plan.drawingId),visible:visible.has(plan.drawingId),
     })).sort((a,b)=>a.plan.depth-b.plan.depth||a.plan.target.z-b.plan.target.z);
     this.hasGraphite=this.entries.some(entry=>entry.art?.material==='graphite-v1');
+    this.hasColor=this.entries.some(entry=>entry.art?.material==='metallic-color');
     this.completed=false;this.seek(0);
   }
   play(){
@@ -68,7 +69,7 @@ export class EndingPreview{
     }
     ctx.restore();
     // A collective source-atop shine would recolor graphite in mixed sessions.
-    if(!this.hasGraphite)paintStrokeShine(ctx,w,h,t);
+    if(!this.hasGraphite)paintStrokeShine(ctx,w,h,t,undefined,this.hasColor);
   }
   destroy(){
     this.pause();this.layout=null;this.entries=[];this.motion=null;

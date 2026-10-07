@@ -51,7 +51,7 @@ export class LEDScene{
           data=await response.json();
         }
         if(data&&(data.version!==2||!drawing.image_path)){
-          canvas._material=data.strokes.some(s=>s.material==='graphite-v1')?'graphite-v1':'metallic';
+          canvas._material=data.strokes.some(s=>s.material==='graphite-v1')?'graphite-v1':data.strokes.some(s=>s.color)?'metallic-color':'metallic';
           paintLedVectors(ctx,data,'#fff');
         }else{
           // The saved SVG is the material master, also used by the library and
@@ -59,14 +59,15 @@ export class LEDScene{
           const response=await fetch(apiUrl(drawing.image_path),{signal:AbortSignal.timeout(10000)});
           if(!response.ok)throw new Error('Không tải được SVG.');
           const blob=await response.blob();
-          canvas._material=blob.type.includes('svg')&&(await blob.text()).includes('data-material="graphite-v1"')?'graphite-v1':'metallic';
+          const svg=blob.type.includes('svg')?await blob.text():'';
+          canvas._material=svg.includes('data-material="graphite-v1"')?'graphite-v1':svg.includes('data-colored="true"')?'metallic-color':'metallic';
           const img=new Image(),url=URL.createObjectURL(blob);img.src=url;
           let timer;try{
             await Promise.race([img.decode(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Hết thời gian tải SVG.')),10000);})]);
             const available=LED.size-LED.padding*2,ratio=Math.min(available/img.width,available/img.height);
             ctx.drawImage(img,LED.padding+(available-img.width*ratio)/2,LED.padding+(available-img.height*ratio)/2,img.width*ratio,img.height*ratio);
           }finally{clearTimeout(timer);URL.revokeObjectURL(url);}
-          if(canvas._material!=='graphite-v1'){ctx.globalCompositeOperation='source-in';ctx.fillStyle='#fff';ctx.fillRect(0,0,LED.size,LED.size);}
+          if(canvas._material==='metallic'){ctx.globalCompositeOperation='source-in';ctx.fillStyle='#fff';ctx.fillRect(0,0,LED.size,LED.size);}
         }
         return canvas;
       })();
@@ -102,7 +103,7 @@ export class LEDScene{
       if(bitmap){
         const canvas=document.createElement('canvas');canvas.width=canvas.height=LED.size;canvas._shineOffset=entry.shineOffset;
         if(bitmap._material==='graphite-v1'){canvas.classList.add('graphite-stroke');canvas.getContext('2d').drawImage(bitmap,0,0);}
-        else{canvas._metalMask=bitmap;paintMetallicMask(canvas.getContext('2d'),bitmap,LED.size,.18+entry.shineOffset);}
+        else{canvas._metalMask=bitmap;paintMetallicMask(canvas.getContext('2d'),bitmap,LED.size,.18+entry.shineOffset,bitmap._material==='metallic-color');}
         canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Nét vẽ của khách tham quan');entry.node.append(canvas);entry.layers.push(canvas);
         const animation=canvas.animate([{opacity:0},{opacity:1}],{duration,fill:'forwards'});
         animation.finished.then(()=>animation.cancel()).catch(()=>{});
@@ -115,7 +116,7 @@ export class LEDScene{
     // Client rects also exclude hosts hidden by display:none on an ancestor.
     if(time-this.lastShine>=50&&!document.hidden&&this.host.getClientRects().length>0){
       this.lastShine=time;const phase=(time%6000)/6000;
-      for(const entry of this.nodes)for(const layer of entry.layers)if(layer._metalMask)paintMetallicMask(layer.getContext('2d'),layer._metalMask,LED.size,phase+layer._shineOffset);
+      for(const entry of this.nodes)for(const layer of entry.layers)if(layer._metalMask)paintMetallicMask(layer.getContext('2d'),layer._metalMask,LED.size,phase+layer._shineOffset,layer._metalMask._material==='metallic-color');
     }
     this.shineFrame=requestAnimationFrame(next=>this.animateShine(next));
   }
@@ -128,7 +129,7 @@ export class LEDScene{
     const page=state.pages.find(p=>p.id===state.current_page_id),lib=new Map(state.drawings.map(d=>[d.id,d]));
     for(const cell of page?.cells||[]){const drawing=lib.get(cell.active);if(drawing&&!drawing.deleted){const bitmap=await this.asset(drawing),box=cellGeometry(cell.id);
       if(bitmap._material==='graphite-v1')ctx.drawImage(bitmap,box.x,box.y);
-      else{const metal=document.createElement('canvas');metal.width=metal.height=LED.size;paintMetallicMask(metal.getContext('2d'),bitmap,LED.size,(performance.now()%6000)/6000+(cell.id%9)/90);ctx.drawImage(metal,box.x,box.y);}
+      else{const metal=document.createElement('canvas');metal.width=metal.height=LED.size;paintMetallicMask(metal.getContext('2d'),bitmap,LED.size,(performance.now()%6000)/6000+(cell.id%9)/90,bitmap._material==='metallic-color');ctx.drawImage(metal,box.x,box.y);}
     }}
     return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Không xuất được ảnh LED.')),'image/png'));
   }

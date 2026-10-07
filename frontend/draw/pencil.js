@@ -23,7 +23,7 @@ export function paintStroke(ctx, stroke, size=720) {
   paintMonoStroke(ctx, {
     points: stroke.points,
     width: stroke.width,
-    color: stroke.erase ? '#000' : metallicGold(ctx,size),
+    color: stroke.erase ? '#000' : metallicGold(ctx,size,stroke.material===MONO_MATERIAL?stroke.color:undefined),
     erase: stroke.erase,
     opacity:!stroke.erase&&stroke.material===MONO_MATERIAL?monoOpacity(stroke.points):1,
   });

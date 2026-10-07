@@ -23,6 +23,39 @@ class LEDTests(unittest.TestCase):
         vectors={'version':1,'profile':'led-2px','strokes':[{'erase':False,'width':2,'points':[[10,10],[60,60]]}]}
         return self.client.post('/api/drawings',data={'submission_id':key or uuid4().hex,'strokes':json.dumps(vectors),**(extra or {})})
     def state(self):return self.client.get('/api/state').json()
+    def test_colored_mono_roundtrip_retry_svg_and_restart(self):
+        data={'version':2,'profile':'led-2px','strokes':[
+            {'erase':False,'material':'mono-v1','width':2,'color':'#2f6972','points':[[10,20,.5],[200,20,.5]]},
+            {'erase':True,'points':[[100,20]]},
+            {'erase':False,'material':'mono-v1','width':1,'color':'#1264A3','points':[[300,300,1]]},
+            {'erase':False,'material':'mono-v1','width':2,'points':[[400,400,.5]]},
+        ]}
+        key=uuid4().hex;response=self.upload({'strokes':json.dumps(data)},key);response.raise_for_status()
+        drawing=response.json();data['strokes'][0]['color']='#2F6972'
+        self.assertEqual(self.client.get(drawing['vector_path']).json(),data)
+        self.assertTrue(self.upload({'strokes':json.dumps(data)},key).json()['replayed'])
+        changed=json.loads(json.dumps(data));changed['strokes'][0]['color']='#B87333'
+        self.assertEqual(self.upload({'strokes':json.dumps(changed)},key).status_code,409)
+        svg=self.client.get(drawing['image_path']).text
+        for fragment in ['data-colored="true"','url(#ink2F6972)','url(#ink1264A3)','url(#legacy)','opacity="0.95"','stroke-width="13.091"','<mask']:
+            self.assertIn(fragment,svg)
+        self.assertNotIn('<rect width="720" height="720" fill="#',svg)
+        with TestClient(create_app(self.temp.name)) as restarted:
+            self.assertEqual(restarted.get(drawing['vector_path']).json(),data)
+            self.assertEqual(restarted.get(drawing['image_path']).text,svg)
+
+    def test_invalid_ink_cannot_enter_storage_or_svg(self):
+        base={'version':2,'profile':'led-2px','strokes':[{'erase':False,'material':'mono-v1','width':2,'color':'#2F6972','points':[[10,20,.5]]}]}
+        before=self.state()
+        for color in [None,True,1,[],{},'#abc','red','#1234567','#12345Z','url(https://example.com)','\"/><script/>']:
+            data=json.loads(json.dumps(base));data['strokes'][0]['color']=color
+            self.assertEqual(self.upload({'strokes':json.dumps(data)}).status_code,422)
+        for stroke in [{'erase':True,'color':'#2F6972','points':[[10,20]]},
+                       {'erase':False,'color':'#2F6972','points':[[10,20]]},
+                       {'erase':False,'material':'graphite-v1','seed':17,'color':'#2F6972','points':[[10,20,.5]]}]:
+            self.assertEqual(self.upload({'strokes':json.dumps({**base,'strokes':[stroke]})}).status_code,422)
+        after=self.state();before.pop('server_time');after.pop('server_time')
+        self.assertEqual(after,before)
     def test_frontend_code_revalidates_cache_but_images_keep_normal_caching(self):
         for path in ['/draw/','/control/','/display/','/draw/app.js','/shared/monoline.js','/draw/style.css']:
             response=self.client.get(path);self.assertEqual(response.status_code,200)

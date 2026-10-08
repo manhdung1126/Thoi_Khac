@@ -1,11 +1,6 @@
 # THỜI KHẮC
 
 *Mỗi nét vẽ – một mảnh ký ức.*
-
-## Tổng quan
-
-THỜI KHẮC là ứng dụng tương tác tại triển lãm: khách viết hoặc vẽ trên thiết bị của mình, gửi tác phẩm lên màn LED và cùng tạo nên không gian lưu dấu ấn. Ban tổ chức quản lý nội dung trình chiếu và phần kết hội tụ nét vẽ thành hình ảnh của triển lãm.
-
 ## Ba không gian chính
 
 | Đường dẫn | Người sử dụng | Vai trò |

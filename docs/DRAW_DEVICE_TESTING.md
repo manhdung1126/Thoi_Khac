@@ -1,8 +1,8 @@
 # Draw — thử trên iPad/iPhone thật
 
-Trạng thái: **bộ đo sẵn sàng; chưa có số đo hoặc kết luận trên thiết bị thật**.
-Control đã đóng phạm vi; không tối ưu Ending, thuật toán Draw hay UI trong đợt này.
-Các kiểm tra Chrome tự động chỉ chứng minh bộ đo không đổi đầu ra, **không phải bằng chứng iPad/iPhone**.
+Hướng dẫn cho đội kỹ thuật thử Draw trên thiết bị triển lãm bằng dữ liệu tạm.
+Ghi kết quả từ thao tác thật trên Safari; các kiểm tra Chrome tự động chỉ chứng minh
+bộ đo không đổi đầu ra, không thay thế trải nghiệm trên iPad/iPhone.
 
 ## 1. Mở phiên thử an toàn
 

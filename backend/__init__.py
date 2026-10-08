@@ -1,1 +1,1 @@
-"""Backend package for Cloud of Strokes."""
+"""Backend package for THỜI KHẮC."""

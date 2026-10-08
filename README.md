@@ -2,151 +2,117 @@
 
 *Mỗi nét vẽ – một mảnh ký ức.*
 
-THỜI KHẮC là trải nghiệm tương tác dành cho triển lãm: khách tham quan viết hoặc vẽ trên điện thoại, gửi tác phẩm lên màn LED và cùng nhau tạo nên một không gian lưu dấu ấn. Ban tổ chức quản lý nội dung trình chiếu và thực hiện phần kết bằng màn hội tụ các nét vẽ thành hình ảnh của triển lãm.
+## Tổng quan
 
-| Không gian | Dành cho | Chức năng chính |
+THỜI KHẮC là ứng dụng tương tác tại triển lãm: khách viết hoặc vẽ trên thiết bị của mình, gửi tác phẩm lên màn LED và cùng tạo nên không gian lưu dấu ấn. Ban tổ chức quản lý nội dung trình chiếu và phần kết hội tụ nét vẽ thành hình ảnh của triển lãm.
+
+## Ba không gian chính
+
+| Đường dẫn | Người sử dụng | Vai trò |
 | --- | --- | --- |
-| **Draw — Khắc nét** | Khách tham quan | Vẽ, chọn màu và gửi tác phẩm |
-| **Display — Trình chiếu** | Màn LED | Hiển thị tác phẩm, luân phiên nội dung và phát Dấu Ấn |
-| **Control — Điều khiển** | Ban tổ chức | Quản lý trang, tác phẩm, khoảnh khắc và phần kết |
+| `/draw/` | Khách tham quan | Vẽ, chọn nét/màu và gửi tác phẩm |
+| `/display/` | Máy nối màn LED | Trình chiếu 27 ô và phát Dấu Ấn |
+| `/control/` | Ban tổ chức | Quản lý trang, tác phẩm, khoảnh khắc và phần kết |
 
-Tên thư mục bàn giao của ứng dụng là `cloud_of_strokes`.
+Trang `/` là trang chào dành cho khách, dẫn đến Draw. Dấu Ấn không có trang độc lập: người vận hành chuẩn bị/bắt đầu/đặt lại trong Control, còn Display phát phần trình diễn.
 
-## Trải nghiệm của khách tham quan
+## Kiến trúc
 
-1. Mở đường dẫn Draw do ban tổ chức cung cấp.
-2. Vẽ trên bảng bằng ngón tay, bút cảm ứng hoặc chuột.
-3. Mở nút **Bút** để chọn một trong năm độ rộng, màu có sẵn hoặc màu tùy chọn. Có thể dùng tẩy, hoàn tác và làm lại khi cần.
-4. Bấm **Khắc** để gửi tác phẩm lên không gian chung.
+Một máy chủ FastAPI phục vụ giao diện, API và WebSocket. Draw gửi dữ liệu đường nét; máy chủ sinh SVG nền trong suốt và lưu trên ổ đĩa. Control và Display nhận thông báo thay đổi qua WebSocket rồi tải trạng thái và tác phẩm qua HTTP.
 
-Sau khi gửi thành công, bảng vẽ được làm sạch để khách tiếp tục vẽ hình mới. Nếu gửi thất bại, hình vẫn được giữ để thử lại. Bản nháp được lưu trên trình duyệt của thiết bị đang vẽ; đây không phải bản sao lưu trên máy chủ.
+```mermaid
+flowchart LR
+    Draw["Khách · Draw"] -->|Gửi dữ liệu nét|API["FastAPI"]
+    Control["Ban tổ chức · Control"] -->|Thao tác quản trị|API
+    API -->|Đọc và lưu|Storage["Kho dữ liệu cục bộ"]
+    API -->|Thông báo WebSocket|Display["Màn LED · Display"]
+    Display -->|Tải trạng thái và tác phẩm|API
+```
 
-Nét vẽ có độ rộng ổn định, màu được giữ khi trình chiếu và có hiệu ứng ánh kim. Tác phẩm được lưu dưới dạng SVG nền trong suốt để có thể sử dụng tiếp trong công việc thiết kế.
+## Tính năng chính
 
-## Vận hành triển lãm
+- Vẽ Mono line, năm độ rộng, màu có sẵn hoặc RGB tùy chọn, tẩy, hoàn tác/làm lại và bản nháp trên thiết bị.
+- Gửi có thể thử lại mà không tạo bản trùng của cùng lần gửi; chỉ làm sạch bảng sau xác nhận thành công.
+- LED **1536 × 768**, tỷ lệ **2:1**, 27 ô phân bổ cân bằng, luân phiên độc lập, chuyển cảnh mờ dần và hiệu ứng ánh kim.
+- Chọn trang để chỉnh không đổi màn LED; nút **Chiếu trang** mới chuyển nội dung.
+- Kho nét vẽ có tìm kiếm, phân trang, yêu thích, thùng rác và xóa vĩnh viễn.
+- Lưu bố cục khoảnh khắc để chiếu lại; Dấu Ấn có xem thử bằng hình mẫu và phát bằng bộ nét thật đã chốt.
 
-### Chuẩn bị trước khi đón khách
+## Công nghệ
 
-1. Khởi động ứng dụng trên máy điều khiển và kiểm tra các thiết bị cùng truy cập được mạng triển lãm.
-2. Mở Display trên máy nối với LED. Đưa chuột đến góc dưới bên phải để hiện nút toàn màn hình, hoặc nhấn **F**. Nhấn **Esc** để thoát.
-3. Mở Control, đăng nhập bằng mã quản trị và chọn trang cần trình chiếu.
-4. Gửi thử một nét từ điện thoại; kiểm tra màu, độ dày và vị trí trên LED thực tế.
-5. Cung cấp đường dẫn Draw cho khách tham quan. Không chia sẻ mã quản trị.
+- Máy chủ: Python, FastAPI/Uvicorn và Pillow.
+- Giao diện: HTML, CSS và JavaScript dùng trực tiếp trong trình duyệt; không cần bước đóng gói frontend.
+- Lưu trữ: JSON, SVG và file ảnh trên máy chạy ứng dụng.
+- Kiểm thử: Python unittest, Node.js Test Runner và Playwright.
 
-### Quản lý trang và ô trình chiếu
+## Chạy nhanh
 
-Mỗi trang có **27 ô cố định** trong phần cuộn sớ. Tác phẩm gửi mới được phân bổ ngẫu nhiên, ưu tiên các ô có ít hình nhất: 27 ô được lấp đầy lượt đầu trước khi một ô nhận hình thứ hai. Khi một ô chứa nhiều hình, các hình luân phiên bằng chuyển cảnh mờ dần. Mỗi ô có nhịp luân phiên riêng.
-
-Trong Control, người vận hành có thể:
-
-- Tạo, đặt tên và xóa trang.
-- Chọn ô để thêm, chuyển hoặc bỏ tác phẩm khỏi ô; chọn hình cần hiện ngay.
-- Điều chỉnh thời gian luân phiên và tạm dừng hoặc tiếp tục trình chiếu.
-- Tìm tác phẩm theo mã để thao tác nhanh trong kho nét vẽ.
-
-**Chọn trang chỉ mở trang đó để chỉnh sửa. Màn LED chỉ đổi trang khi bấm “Chiếu trang”.** Người vận hành có thể chuẩn bị nội dung khác mà không làm gián đoạn trang đang chiếu.
-
-### Yêu thích và thùng rác
-
-Tick trái tim để đưa tác phẩm vào mục **Yêu thích**. Ứng dụng tạo một bản sao SVG trong thư mục `backend/storage/favorites/`, thuận tiện cho việc lấy file để chỉnh sửa ngoài. Bỏ yêu thích sẽ xóa bản sao này; bản sao được giữ nếu hình gốc bị xóa vĩnh viễn.
-
-Tác phẩm đưa vào thùng rác có thể được khôi phục. **Xóa vĩnh viễn không thể hoàn tác** và sẽ gỡ tác phẩm gốc khỏi các trang có sử dụng nó, bao gồm trang khoảnh khắc. Hãy sao lưu trước khi xóa số lượng lớn.
-
-### Lưu và chiếu khoảnh khắc
-
-**Lưu khoảnh khắc** ghi lại các hình đang hiện trong từng ô của trang đang chỉnh, tạo một trang riêng và một ảnh xem trước có thể tải về. Đây là bố cục tại thời điểm lưu, không phải video và không bao gồm toàn bộ danh sách hình luân phiên trong các ô.
-
-Vào mục khoảnh khắc và bấm **Chiếu khoảnh khắc** để đưa bố cục đó lên LED. Trang khoảnh khắc dùng chung tác phẩm trong kho, không phải bản sao độc lập của từng hình. Xóa khoảnh khắc cũng xóa trang tương ứng; nếu trang đó đang chiếu, hãy chuyển sang trang khác trước.
-
-### Dấu Ấn — phần kết triển lãm
-
-1. Mở phần **Dấu Ấn** trong Control và tải ảnh đích của triển lãm lên.
-2. **Xem thử** với nét thật hoặc số lượng hình mẫu để hình dung quá trình từ trình chiếu bình thường đến hội tụ thành hình. Hình mẫu chỉ phục vụ xem thử, không được thêm vào kho tác phẩm.
-3. Bấm **Chuẩn bị LED**. Ứng dụng chốt bộ nét thật từ trang đang chiếu, gồm cả các hình trong danh sách luân phiên.
-4. Chờ LED báo sẵn sàng rồi bắt đầu phần kết.
-5. Kết thúc hoặc cần quay lại trình chiếu bình thường: dùng nút đặt lại trong phần Dấu Ấn.
-
-Trong khi phần kết đã được chuẩn bị hoặc đang phát, một số thao tác thay đổi nội dung nguồn bị khóa để giữ buổi trình chiếu nhất quán. Tác phẩm khách gửi thêm vẫn được lưu, nhưng không tham gia bộ nét đã chốt cho lần phát đó.
-
-## Thiết bị và điều kiện sử dụng
-
-- Một máy tính chạy ứng dụng, lưu dữ liệu và phục vụ các thiết bị trong triển lãm.
-- Một trình duyệt trên máy nối với màn LED; Control có thể mở trên máy này hoặc thiết bị khác cùng mạng.
-- Điện thoại hoặc máy tính bảng có trình duyệt hỗ trợ cảm ứng.
-- Mạng nội bộ ổn định, cho phép các thiết bị truy cập máy chạy ứng dụng.
-
-Bố cục LED được thiết kế cho **1536 × 768 pixel, tỷ lệ 2:1**, tương ứng màn P3 kích thước khoảng **4,6 × 2,3 m**. Cần kiểm tra cách xuất tín hiệu để nội dung không bị kéo giãn hoặc cắt mất mép. Hiệu ứng và màu sắc phải được duyệt trên màn LED thực tế, không chỉ trên màn laptop.
-
-Máy chạy ứng dụng cần luôn bật, không ngủ và còn đủ dung lượng lưu trữ. Tắt máy hoặc ngắt mạng sẽ làm gián đoạn gửi hình và cập nhật trình chiếu.
-
-## Khởi động trên máy điều khiển
-
-Các lệnh dưới đây dành cho đội kỹ thuật bàn giao, chạy từ thư mục dự án trên macOS hoặc Linux. Máy cần có Python 3.
-
-### Cài đặt lần đầu
+Từ thư mục dự án trên macOS hoặc Linux, với Python 3 đã cài:
 
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r backend/requirements.txt
-```
-
-### Chạy thử trên một máy
-
-```sh
 .venv/bin/python run.py
 ```
 
-Mở các địa chỉ:
+Mở [trang chào](http://127.0.0.1:8000/), [Draw](http://127.0.0.1:8000/draw/), [Display](http://127.0.0.1:8000/display/) hoặc [Control](http://127.0.0.1:8000/control/). Mã quản trị `2468` chỉ dành cho thử nghiệm localhost.
 
-- Trang chào: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-- Draw: [http://127.0.0.1:8000/draw/](http://127.0.0.1:8000/draw/)
-- Display: [http://127.0.0.1:8000/display/](http://127.0.0.1:8000/display/)
-- Control: [http://127.0.0.1:8000/control/](http://127.0.0.1:8000/control/)
+Dừng bằng Ctrl+C. Các lần chạy sau chỉ cần `.venv/bin/python run.py`. Có thể thêm `--port 8001` để đổi cổng.
 
-Mã quản trị mặc định **2468** chỉ dành cho thử nghiệm.
+## Chạy trong mạng triển lãm
 
-### Cho điện thoại cùng mạng truy cập
-
-Đặt mã quản trị riêng trước khi sử dụng tại triển lãm. Thay giá trị minh họa trong lệnh sau bằng mã của ban tổ chức:
+Thay mã minh họa bằng mã riêng của ban tổ chức:
 
 ```sh
 CLOUD_ADMIN_PIN='thay-bang-ma-quan-tri-rieng' .venv/bin/python run.py --lan
 ```
 
-Dùng địa chỉ mạng nội bộ được in khi khởi động để mở Draw trên điện thoại. `127.0.0.1` chỉ trỏ đến chính thiết bị đang mở trang, không phải máy điều khiển ở thiết bị khác.
+LAN bắt buộc mã riêng: thiếu mã, mã trống hoặc mã mặc định `2468` sẽ bị từ chối trước khi mở máy chủ. Mở địa chỉ LAN được in khi khởi động trên các thiết bị cùng mạng; không dùng `127.0.0.1` trên điện thoại để truy cập máy điều khiển.
 
-Dừng ứng dụng bằng **Ctrl+C**. Khi khởi động lại, tiếp tục dùng cùng mã quản trị riêng. Có thể thêm `--port 8001` nếu cổng mặc định đang được sử dụng; khi đó phải cập nhật đường dẫn trên các thiết bị.
+## Kiểm thử
 
-Ứng dụng phục vụ trực tiếp qua mạng nội bộ. Mã quản trị không thay thế mã hóa đường truyền; chỉ sử dụng trên mạng tin cậy. Nếu cần truy cập qua Internet, đội kỹ thuật cần cấu hình HTTPS và bảo vệ truy cập trước khi công khai.
+Cài môi trường Python như trên và Node.js **20 trở lên**:
 
-## Dữ liệu và sao lưu
+```sh
+npm ci
+npx playwright install chromium
+npm test
+```
 
-Dữ liệu triển lãm nằm trên **máy chạy ứng dụng**, trong thư mục `backend/storage/`. Kho này chứa tác phẩm, dữ liệu nét vẽ, bản sao yêu thích, trang trình chiếu và khoảnh khắc đã lưu.
+Nếu đã có Google Chrome, có thể bỏ bước tải Chromium và chạy `PLAYWRIGHT_CHANNEL=chrome npm test`. Bộ test dùng kho tạm và máy chủ riêng, không tác động dữ liệu triển lãm.
 
-Để sao lưu hoặc chuyển sang máy khác:
+CI trong [ci.yml](.github/workflows/ci.yml) chạy cùng bộ test với Chromium. Không có task lint, type checking hoặc build frontend; không coi kiểm tra cú pháp là thay thế các bước đó.
 
-1. Dừng ứng dụng.
-2. Sao chép **toàn bộ** thư mục `backend/storage/` sang nơi lưu trữ an toàn.
-3. Khi chuyển máy, cài ứng dụng rồi khôi phục nguyên thư mục dữ liệu trước khi khởi động.
-4. Mở Control để kiểm tra trang, tác phẩm và khoảnh khắc; đăng nhập lại sau khi khởi động máy chủ.
+## Cấu trúc dự án
 
-Không xóa riêng file ảnh hoặc sửa dữ liệu bằng tay trong khi ứng dụng đang chạy. Hãy quản lý tác phẩm qua Control để thông tin và file luôn đồng bộ.
+```text
+run.py                Khởi động ứng dụng
+backend/app/          API, xác thực, lưu trữ, phân ô và chốt Dấu Ấn
+backend/storage/      Dữ liệu triển lãm, không đưa vào Git
+frontend/draw/        Bảng vẽ cho khách
+frontend/display/     Màn LED và nền cuộn sớ
+frontend/control/     Bàn điều khiển của ban tổ chức
+frontend/ending/      Module Dấu Ấn dùng chung cho Control và Display
+frontend/shared/      Giao tiếp API, vật liệu nét, hình học và tài nguyên chung
+tests/                Kiểm thử chức năng và trình duyệt
+benchmarks/           Công cụ đo và kiểm tra thiết bị
+benchmarks/results/   Báo cáo local, không đưa vào Git
+docs/                 Hướng dẫn vận hành và tài liệu kỹ thuật
+```
 
-GitHub chỉ dùng để bàn giao mã ứng dụng và tài nguyên giao diện. Dữ liệu khách tham quan, mã quản trị và bản sao lưu cần được chuyển riêng, không đưa vào kho mã công khai. Tuân thủ chính sách của triển lãm về đồng ý sử dụng và thời hạn lưu tác phẩm.
+## Tài liệu
 
-## Khi gặp sự cố
+- [Vận hành triển lãm](docs/OPERATIONS.md): mạng, quản lý nội dung, sao lưu và xử lý sự cố.
+- [Lắp đặt LED](docs/LED_INSTALLATION.md): kích thước, bố cục và đầu ra.
+- [Dấu Ấn](docs/ENDING_CONTROL.md): chuẩn bị, phát và quay lại trình chiếu.
+- [Vật liệu nét vẽ](docs/DRAW_MATERIAL.md): màu, độ rộng và đầu ra trong suốt.
+- [Kiểm thử](docs/TESTING.md) và [thử Draw trên thiết bị thật](docs/DRAW_DEVICE_TESTING.md).
+- [Phạm vi sản phẩm](PRODUCT.md) và [hệ thống thiết kế](DESIGN.md).
 
-| Hiện tượng | Cách kiểm tra |
-| --- | --- |
-| Điện thoại không mở được Draw | Kiểm tra cùng mạng, đúng địa chỉ máy điều khiển, máy không ngủ và mạng không chặn kết nối giữa thiết bị. Nhờ đội kỹ thuật kiểm tra quyền truy cập mạng; không tắt toàn bộ tường lửa. |
-| Gửi hình thất bại | Giữ trang và bản vẽ, kiểm tra kết nối rồi thử lại. Không xóa dữ liệu trình duyệt khi đang cần giữ bản nháp. |
-| Trang chọn trong Control chưa hiện lên LED | Bấm “Chiếu trang”; chọn trang để chỉnh không tự thay nội dung đang chiếu. |
-| Hình không luân phiên | Kiểm tra trạng thái tạm dừng, thời gian luân phiên và ô có nhiều hơn một hình hay chưa. |
-| Không thao tác được trong Control | Kiểm tra phiên đăng nhập và trạng thái Dấu Ấn. Sau khi máy chủ khởi động lại cần đăng nhập lại. |
-| LED chưa hiện thay đổi | Kiểm tra kết nối của máy trình chiếu và tải lại Display. Nếu vẫn lỗi, ghi lại thông báo để đội kỹ thuật kiểm tra. |
+## Bảo mật và giới hạn triển khai
 
-Khi cần hỗ trợ, cung cấp thiết bị, trình duyệt, thao tác vừa thực hiện và ảnh chụp thông báo lỗi. Không gửi mã quản trị hoặc toàn bộ dữ liệu khách qua kênh công khai.
+Ứng dụng hiện dành cho **một tiến trình máy chủ trên mạng tin cậy**. Kho dữ liệu nằm trên máy chạy ứng dụng; phiên quản trị cần đăng nhập lại sau khi máy chủ khởi động lại. Không chạy nhiều worker cùng ghi vào một kho JSON.
 
-## Tài liệu dành cho đội kỹ thuật
+Mã quản trị không mã hóa đường truyền. Triển khai Internet cần HTTPS và đánh giá bảo mật riêng; test đạt không phải chứng nhận sẵn sàng vận hành công khai.
 
-- [Hướng dẫn kiểm thử](docs/TESTING.md): các lệnh và phạm vi kiểm tra tự động.
+Không đưa dữ liệu khách, mã quản trị hoặc bản sao lưu lên GitHub. Giữ `backend/storage/` ngoài Git và sao lưu toàn bộ kho khi ứng dụng đã dừng. Xem [hướng dẫn vận hành](docs/OPERATIONS.md) trước khi chuyển máy hoặc xóa dữ liệu.

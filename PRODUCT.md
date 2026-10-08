@@ -1,4 +1,4 @@
-# THỜI KHẮC — Cloud of Strokes
+# THỜI KHẮC
 
 An interactive exhibition where visitors contribute handwritten drawings to a live LED
 composition. This document records existing product decisions, not a new feature proposal.

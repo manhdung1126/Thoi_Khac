@@ -9,8 +9,8 @@
 - Khoảng cách cạnh ô: `47 × 1536 / 4600 ≈ 15,69 px`.
 - Draw: **720×720** đơn vị. Mức 3 rộng `2 × 720 / 110 ≈ 13,09` đơn vị, tương ứng **2 px LED**. Các nét đã lưu giữ dữ liệu đường nét và mức bút; không ghi đè tác phẩm cũ.
 - Mức 1–5: `1 / 1,5 / 2 / 2,5 / 3 px` trên LED. Độ rộng lưu trên từng nét.
-- Nét mới (vector v1): **Mono line vàng đặc `#FFD700`**, độ rộng cố định theo mức bút, không hạt/texture, không thay alpha hay độ rộng theo lực. Xem [DRAW_MATERIAL.md](DRAW_MATERIAL.md).
-- Trình chiếu nét vàng: **vàng `#E7BD00`**, sắc độ vàng đất và phản sáng vàng kem chuyển động bên trong nét. Không dùng glow ngoài nét. SVG giữ màu đặc `#FFD700`; không ghi đè tác phẩm cũ.
+- Nét mới (vector v2): **Mono line**, độ rộng cố định theo mức bút, màu mặc định `#E7BD00`, có màu có sẵn và RGB tùy chọn. Lực bút hoặc vận tốc thay đổi nhẹ alpha toàn nét, không đổi độ rộng. Xem [DRAW_MATERIAL.md](DRAW_MATERIAL.md).
+- Draw và SVG giữ bản ánh kim tĩnh theo màu đã chọn; Display/Control thêm phản sáng chuyển động bên trong nét. Không dùng glow ngoài nét và không ghi đè tác phẩm cũ.
 - Tương thích graphite v2 đã lưu: tiếp tục đọc đúng vật liệu cũ, không xóa dữ liệu hoặc tự đổi màu.
 
 Điểm vẽ và hình học Mono được dùng chung giữa Draw, SVG và LED. Trình duyệt gửi dữ liệu vector đã chuẩn hóa; server kiểm tra rồi sinh SVG nền trong suốt. Đầu ra LED cần mapping 1:1 để giữ kích thước.
@@ -35,7 +35,7 @@ Tạm dừng giữ hình đang hiện; hình mới vào ô có hình sẽ chờ.
 | Vật liệu graphite và hạt cố định | `frontend/shared/graphite.js` |
 | Phân ô, luân phiên, giới hạn dữ liệu vector | `backend/app/led.py` |
 
-Nền hiện tại là asset cục bộ thay được. Nét phản quang có chu kỳ khoảng 6 giây; trình vẽ ánh sáng giới hạn khoảng 20 FPS. Thiết bị bật giảm chuyển động sẽ dùng nét tĩnh. Quầng sáng nhẹ là hiệu ứng ngoài nét nên phạm vi sáng nhìn thấy có thể lớn hơn lineWidth.
+Nền hiện tại là asset cục bộ thay được. Nét phản quang có chu kỳ khoảng 6 giây; trình vẽ ánh sáng giới hạn khoảng 20 FPS. Thiết bị bật giảm chuyển động sẽ dùng nét tĩnh. Ánh sáng giữ trong alpha nét, không thêm quầng ngoài nét.
 
 Display, Control, ảnh khoảnh khắc và preview Dấu Ấn dùng cùng nền và hình học ô. Hình hội tụ cuối Dấu Ấn được giới hạn trong vùng giấy ở giữa (x:408, y:238, 720×344), chừa dòng kết bên dưới; không phủ lên tiêu đề hoặc mây góc trái.
 

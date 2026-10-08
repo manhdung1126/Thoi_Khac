@@ -407,7 +407,7 @@ def create_app(storage_path=None):
             with suppress(RuntimeError, OSError):
                 await connection.close()
 
-    app = FastAPI(title="Cloud of Strokes", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="THỜI KHẮC", version="1.0.0", lifespan=lifespan)
     app.state.store = store
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(CORSMiddleware, allow_origins=["http://127.0.0.1:4173", "http://localhost:4173"], allow_methods=["*"], allow_headers=["*"])
@@ -432,6 +432,7 @@ def create_app(storage_path=None):
 
     @app.get("/api/health")
     def health():
+        # Keep the public service identifier compatible with existing probes.
         return {"status": "ok", "service": "cloud-of-strokes-api"}
 
     @app.get("/api/state")

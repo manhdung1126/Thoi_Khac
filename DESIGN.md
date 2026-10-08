@@ -141,7 +141,7 @@ One local system stack serves the UI, beginning with Avenir Next where available
 
 - **Display:** welcome title; portrait uses `clamp(44px,9vw,76px)` and short landscape uses (42px).
 - **Headline:** Control page title; phone uses (27px).
-- **Title:** Control section titles. Draw's contextual heading uses (20px), weight (500), line height (1.4), with (18px) in short landscape.
+- **Title:** Control section titles. Draw's heading is screen-reader-only so visitors focus directly on the canvas.
 - **Body:** Control's base text. Welcome invitation uses (20px), line height (1.6), width (32ch), falling to (17px) on phones and (16px) in short landscape.
 - **Label:** compact operational descriptions and tool captions. Numeric operational values use tabular figures. Draw RGB fields and Control fields at widths up to (820px) use (16px) to avoid small-input Safari zoom.
 
@@ -149,7 +149,7 @@ One local system stack serves the UI, beginning with Avenir Next where available
 
 Shared spacing values record recurring distances, not a new universal grid. Welcome caps its two-column composition at (1200px), with its supplied illustration beside the invitation; portrait up to (900px) stacks and centers the composition. Phone and short-landscape rules reduce padding and type without adding navigation.
 
-Draw centers a square paper and contextual header within (720px). The paper width respects available dynamic viewport height: `min(720px, 100%, calc(100dvh - 264px))`, with an `svh` fallback. Short landscape uses the existing (190px) height reserve. The tool row can exceed the paper width while respecting viewport width, using a zero-minimum grid track and gaps of (8px). Feedback reserves (60px), or (48px) in short landscape, in normal flow. Insets account for safe areas.
+Draw centers a square paper within (720px), without a visible header or navigation. Paper width respects dynamic viewport height: `min(720px, 100%, calc(100dvh - 156px))`, with an `svh` fallback. Short landscape uses the same (156px) reserve. The tool row sits below the paper and may exceed its width while respecting viewport width. Insets account for safe areas; status feedback uses the existing toast.
 
 Control caps at (1720px): a flexible operational column and a sticky (380px) library, shifting to (420px) above (1500px) and (330px) below (1100px). At (820px) it becomes a single flow with a static library. On wide but short screens, the library also becomes static. Preserve this operational hierarchy rather than copying Welcome's composition.
 
@@ -165,10 +165,10 @@ Gently curved controls share the control radius; compact library contexts and th
 
 - **Welcome action:** native link, ivory text on teal, minimum height (60px), with an inline arrow. Phone height is (56px); short landscape height is (48px). Active state darkens the existing teal.
 - **Draw submission:** teal Khắc action with an explicit muted disabled state. Existing submitting, success and retry messages remain near the paper; submitting uses soft teal. Disabled state and color never replace the text or live feedback.
-- **Draw tools:** compact outlined SVG icons with captions for Bút/Tẩy. Selected tools use soft teal, teal border and `aria-pressed`; history controls retain disabled states. Minimum targets are (44px), with larger default tool heights of (56px).
+- **Draw tools:** compact outlined SVG icons with accessible labels and tooltips, without visible captions. Selected tools use soft teal, teal border and `aria-pressed`; history controls retain disabled states. Minimum targets are (44px), with larger default tool heights of (56px).
 - **Operator buttons:** teal primary, transparent secondary with a control stroke, and brick-text destructive variants. All have minimum height (44px), native disabled behavior and visible focus.
 - **Fields:** ivory surface and control stroke, minimum height (44px). Retain visible labels, native number/color/select behavior and error semantics. RGB fields use the smaller radius.
-- **Navigation:** visitor welcome has the single Draw action; Draw has a subdued return link. Control has its own topbar and operational section links. Library filters are native pressed buttons with a teal active underline; they are not a public application menu.
+- **Navigation:** visitor welcome has the single Draw action; Draw exposes only the canvas and drawing controls. Control has its own topbar and operational section links. Library filters are native pressed buttons with a teal active underline; they are not a public application menu.
 - **Cards and containers:** stage preview has an ivory container with toolbar and footer; saved moments use compact rounded containers. Library artwork tiles use teal backing, with a gold outline when already on stage. These preview treatments do not redefine renderer materials.
 
 **The Focus Rule.** Keyboard focus remains a distinct teal outline (3px) with offset (4px), including on links, buttons, inputs, selects and disclosure summaries.

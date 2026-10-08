@@ -24,7 +24,7 @@
         "frontend/control/style.css"
       ],
       "bindingBrief": "PRODUCT.md",
-      "directionContract": "benchmarks/unified-ui-redesign.md"
+      "directionContract": "PRODUCT.md"
     },
     "tonalRampPolicy": "Diagnostic panel strips only, synthesized in OKLCH from each canonical shipping color. Eight steps from 15% to 95% lightness keep source hue/chroma; out-of-gamut samples rely on CSS gamut mapping. These ramps are not shipping palette tokens or an approved replacement palette.",
     "colorMeta": {

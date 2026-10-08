@@ -2,7 +2,7 @@
 
 ## Bút hiện tại
 
-Draw, mẫu bút, SVG và màn xem dùng chung bảng vàng của `shared/metallic.js` (màu cơ sở `#E7BD00`, gần `#FFD700`). Không tạo grain hoặc loang; hình học và độ rộng cố định cho mỗi nét. Đây là mô phỏng web dựa trên mẫu iPhone đã cung cấp, không phải PencilKit hoặc bản sao engine độc quyền của Apple. Viền giấy chỉ là CSS để đánh dấu vùng vẽ, không xuất vào SVG.
+Draw, mẫu bút, SVG và màn xem dùng chung bảng ánh kim của `shared/metallic.js` (màu vàng mặc định `#E7BD00`, gần `#FFD700`). Khách có thể chọn màu có sẵn hoặc RGB tùy ý; mỗi nét giữ riêng màu đã chọn. Không tạo grain hoặc loang; hình học và độ rộng cố định cho mỗi nét. Đây là mô phỏng web dựa trên mẫu iPhone đã cung cấp, không phải PencilKit hoặc bản sao engine độc quyền của Apple. Viền giấy chỉ là CSS để đánh dấu vùng vẽ, không xuất vào SVG.
 
 Tọa độ logic luôn là 720×720; backing canvas nhân devicePixelRatio. Năm mức độ rộng tương ứng 1 / 1,5 / 2 / 2,5 / 3 px trên ô LED 110 px. Mức 3 là `2 × 720 / 110 ≈ 13,09` đơn vị Draw. Pointer Events hỗ trợ chuột, cảm ứng và bút. Bút dùng lực thật (0–1); chuột/ngón tay dùng vận tốc tọa độ logic/ms: chậm đậm hơn, nhanh nhạt hơn. Fallback giới hạn 0,25–0,75; điểm đầu trung tính 0,55. Khi nhấc bút, pressure 0 không làm nhạt nét.
 
@@ -12,7 +12,7 @@ Hình học Mono dùng lại lọc điểm/quadratic hiện có, giữ điểm �
 
 ## Gửi và tương thích
 
-Endpoint không đổi: POST `/api/drawings`, multipart `submission_id` và `strokes`. Nét Mono mới dùng vector v2, profile `led-2px`, material `mono-v1`, điểm `[x,y,p]`, không cần seed. Backend kiểm tra tọa độ/lực hữu hạn và giới hạn 0–1, sinh SVG gradient vàng trong suốt với alpha toàn nét. Draw chỉ xóa bảng khi nhận xác nhận lưu hợp lệ. Lỗi/mất kết nối giữ bản nháp và mã gửi để thử lại, chống tạo hình trùng.
+Endpoint: POST `/api/drawings`, multipart `submission_id` và `strokes`. Nét Mono mới dùng vector v2, profile `led-2px`, material `mono-v1`, điểm `[x,y,p]`, không cần seed; màu tùy chọn được gửi trong trường `color`. Backend kiểm tra tọa độ/lực hữu hạn và giới hạn 0–1, sinh SVG gradient theo màu nét với nền trong suốt và alpha toàn nét. Draw chỉ xóa bảng khi nhận xác nhận lưu hợp lệ. Lỗi/mất kết nối giữ bản nháp và mã gửi để thử lại, chống tạo hình trùng.
 
 Các bản nháp/tác phẩm v1 và graphite v2 của lần thử trước vẫn đọc được. Khi gửi lại bản nháp chưa lưu, nét vàng v1 chuyển sang Mono với lực 1 để giữ alpha 1 và bảng màu chung; graphite giữ material/seed/pressure. Không chuyển đổi hàng loạt, không ghi đè hoặc xóa SVG đã lưu. Các module graphite chỉ còn phục vụ tương thích.
 
@@ -27,7 +27,7 @@ Control dùng giấy sáng, xanh ngọc làm màu thao tác, vàng đất làm �
 ## Kiểm tra
 
 - `node --test tests/*.cjs`
-- `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'`
+- `npm run test:core` (cách ly kho dữ liệu trước khi chạy Python)
 - Trình duyệt: nét cố định/alpha/màu, bản nháp sau reload, gửi SVG và xóa bảng, realtime, ánh kim trước/sau fullscreen, preview trang không đổi trang đang chiếu, yêu thích, khoảnh khắc và preview Dấu Ấn.
 - Kiểm tra Control ở 320/390/1024/1366/1440 px; Display ở tỉ lệ LED và 16:9, gồm 4K.
 

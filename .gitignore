@@ -53,7 +53,6 @@ test-results/
 /.impeccable/build/
 /.impeccable/config.local.json
 /benchmarks/results/
-/benchmarks/unified-ui-redesign.md
 
 # Công cụ/skill/connector cục bộ, không cần để chạy ứng dụng
 /.agents/

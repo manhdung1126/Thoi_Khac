@@ -2,8 +2,8 @@ import {ENDING_CONFIG,ENDING_MOTION} from './config.js';
 import {compose} from './composition.js';
 import {loadArtwork} from './assets.js';
 import {EndingPreview} from './preview.js';
-import {api,apiUrl} from '../shared/api.js';
-import {LED} from '../shared/led.js';
+import {api} from '../shared/api.js';
+import {mountLedBackground} from '../shared/led-background.js';
 
 // Shared production and Control rehearsal: identical snapshot, targets and motion.
 export class EndingPresentation{
@@ -11,9 +11,9 @@ export class EndingPresentation{
     this.host=host;this.display=display;this.rehearsal=rehearsal;this.onError=onError;this.onReady=onReady;
     this.clientId=crypto.randomUUID();this.generation=0;this.serverOffset=0;
     host.classList.add('ending-presentation');host.hidden=true;
-    host.innerHTML='<div class="ending-frame"><img class="ending-background" alt=""><canvas aria-label="Dấu Ấn tập thể"></canvas><p class="ending-final-text" hidden></p></div>';
+    host.innerHTML='<div class="ending-frame"><canvas aria-label="Dấu Ấn tập thể"></canvas><p class="ending-final-text" hidden></p></div>';
     this.frame=host.querySelector('.ending-frame');this.canvas=host.querySelector('canvas');this.text=host.querySelector('p');
-    host.querySelector('img').src=apiUrl(LED.background);this.text.textContent=ENDING_CONFIG.finalText;
+    this.background=mountLedBackground(this.frame,'ending-background',onError);this.text.textContent=ENDING_CONFIG.finalText;
     this.preview=new EndingPreview(this.canvas,(time,running)=>{
       this.text.hidden=!ENDING_CONFIG.finalText||time<ENDING_MOTION.textAt;onTime(time,running);
     });
@@ -79,5 +79,5 @@ export class EndingPresentation{
     this.generation++;this.controller?.abort();clearInterval(this.heartbeat);clearTimeout(this.startTimer);
     this.preview.destroy();this.ready=false;this.loading=false;this.retryAt=0;this.key=null;this.host.hidden=true;this.onReady(false);
   }
-  destroy(){this.clear();this.resize.disconnect();this.host.replaceChildren();}
+  destroy(){this.clear();this.background.destroy();this.resize.disconnect();this.host.replaceChildren();}
 }

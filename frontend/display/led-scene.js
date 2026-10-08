@@ -1,15 +1,15 @@
 import {apiUrl} from '../shared/api.js';
 import {LED,cellGeometry,paintLedVectors} from '../shared/led.js';
 import {paintMetallicMask} from '../shared/metallic.js?v=20261006-exhibition';
+import {mountLedBackground} from '../shared/led-background.js';
 
 export class LEDScene{
   constructor(host,{onError=()=>{},onSelect=()=>{},grid=false,animateMetal=!matchMedia('(prefers-reduced-motion: reduce)').matches}={}){
     this.host=host;this.onError=onError;this.onSelect=onSelect;this.cache=new Map();this.nodes=[];this.destroyed=false;this.lastShine=0;
     host.classList.add('led-viewport');
     host.setAttribute('aria-label','Màn LED 1536 × 768 · 27 ô nét vẽ');
-    host.innerHTML='<div class="led-scene"><img class="led-background" alt=""/><div class="led-cells"></div></div>';
-    this.scene=host.querySelector('.led-scene');this.background=host.querySelector('.led-background');this.background.src=apiUrl(LED.background);
-    this.background.onerror=()=>onError('Không tải được nền cuộn sớ LED.');
+    host.innerHTML='<div class="led-scene"><div class="led-cells"></div></div>';
+    this.scene=host.querySelector('.led-scene');this.background=mountLedBackground(this.scene,'led-background',onError);
     this.layer=host.querySelector('.led-cells');
     for(let i=0;i<LED.count;i++){
       const node=document.createElement(grid?'button':'div'),box=cellGeometry(i);
@@ -122,9 +122,9 @@ export class LEDScene{
   }
   async capture(value=this.state){
     const state=structuredClone(value);if(!state)throw new Error('Chưa tải được cảnh LED.');
-    await this.background.decode();
+    const background=await this.background.frame();
     const canvas=document.createElement('canvas');canvas.width=LED.width;canvas.height=LED.height;const ctx=canvas.getContext('2d');
-    ctx.drawImage(this.background,0,0,LED.width,LED.height);
+    ctx.drawImage(background,0,0,LED.width,LED.height);
     // Snapshot uses the same clean background as the live LED; no debug grid.
     const page=state.pages.find(p=>p.id===state.current_page_id),lib=new Map(state.drawings.map(d=>[d.id,d]));
     for(const cell of page?.cells||[]){const drawing=lib.get(cell.active);if(drawing&&!drawing.deleted){const bitmap=await this.asset(drawing),box=cellGeometry(cell.id);
@@ -133,5 +133,5 @@ export class LEDScene{
     }}
     return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Không xuất được ảnh LED.')),'image/png'));
   }
-  destroy(){this.destroyed=true;cancelAnimationFrame(this.shineFrame);document.removeEventListener('visibilitychange',this.resumeShine);document.removeEventListener('fullscreenchange',this.resumeShine);this.resize.disconnect();this.nodes.forEach(e=>e.layers.forEach(l=>l.getAnimations().forEach(a=>a.cancel())));this.cache.clear();this.host.replaceChildren();}
+  destroy(){this.destroyed=true;this.background.destroy();cancelAnimationFrame(this.shineFrame);document.removeEventListener('visibilitychange',this.resumeShine);document.removeEventListener('fullscreenchange',this.resumeShine);this.resize.disconnect();this.nodes.forEach(e=>e.layers.forEach(l=>l.getAnimations().forEach(a=>a.cancel())));this.cache.clear();this.host.replaceChildren();}
 }

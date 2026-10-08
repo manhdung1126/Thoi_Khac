@@ -5,11 +5,13 @@
   <meta name="theme-color" content="#faf3db"><title>Khắc nét - THỜI KHẮC</title>
   <link rel="icon" type="image/png" href="/shared/assets/exhibition-logo.png">
   <link rel="stylesheet" href="/shared/exhibition-ui.css?v=20261007-unified">
-  <link rel="stylesheet" href="style.css?v=20261007-canvas-only"><script type="module" src="app.js?v=20261006-pressure-cache"></script>
+  <link rel="stylesheet" href="style.css?v=20261008-stampa-v2"><script type="module" src="app.js?v=20261008-lettering"></script>
 </head>
 <body data-profile="led">
 <main class="draw-app">
   <h1 class="sr-only">Bảng vẽ Thời Khắc</h1>
+  <p class="draw-invitation">Sau chặng hành trình lịch sử, hãy gửi một lời nhắn nhủ tới thế&nbsp;hệ ngày nay cũng như bản thân mình trong tương lai nhé</p>
+  <button id="draw-fullscreen" class="floating-control fullscreen-control" type="button" aria-label="Toàn màn hình" aria-pressed="false" title="Toàn màn hình (F)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5m13 5h5v-5"/></svg></button>
   <section class="drawing-stage" aria-label="Bảng vẽ Thời Khắc">
     <div class="paper"><span id="paper-hint" class="sr-only">Bắt đầu nét vẽ của bạn</span><canvas id="drawing-canvas" width="720" height="720" aria-label="Vùng vẽ của khách tham quan">Trình duyệt chưa hỗ trợ Canvas.</canvas></div>
     <div class="top-controls" aria-label="Công cụ vẽ">
@@ -29,18 +31,19 @@
       <output id="mono-width-value" class="sr-only">Mức 3 · 2 px LED</output><span id="led-scale-help" class="sr-only">Mức 3: ≈13,09 px trên bảng → 2 px LED.</span>
       <div class="mono-widths" role="group" aria-label="Chọn một trong năm mức độ rộng nét"><button type="button" data-mono-width="1" aria-label="Nét mức 1" aria-pressed="false">1</button><button type="button" data-mono-width="2" aria-label="Nét mức 2" aria-pressed="false">2</button><button type="button" data-mono-width="3" aria-label="Nét mức 3" aria-pressed="true">3</button><button type="button" data-mono-width="4" aria-label="Nét mức 4" aria-pressed="false">4</button><button type="button" data-mono-width="5" aria-label="Nét mức 5" aria-pressed="false">5</button></div>
       <div class="ink-palette" role="group" aria-label="Màu nét ánh kim">
-        <button type="button" data-stroke-color="#E7BD00" style="--ink:#E7BD00" aria-label="Vàng" title="Vàng" aria-pressed="true"></button>
+        <button type="button" data-stroke-color="#096120" style="--ink:#096120" aria-label="Xanh lá đậm" title="Xanh lá đậm" aria-pressed="true"></button>
+        <button type="button" data-stroke-color="#E7BD00" style="--ink:#E7BD00" aria-label="Vàng" title="Vàng" aria-pressed="false"></button>
         <button type="button" data-stroke-color="#B87333" style="--ink:#B87333" aria-label="Đồng" title="Đồng" aria-pressed="false"></button>
         <button type="button" data-stroke-color="#2F6972" style="--ink:#2F6972" aria-label="Xanh ngọc" title="Xanh ngọc" aria-pressed="false"></button>
         <button type="button" data-stroke-color="#1264A3" style="--ink:#1264A3" aria-label="Xanh lam" title="Xanh lam" aria-pressed="false"></button>
         <button type="button" data-stroke-color="#B85670" style="--ink:#B85670" aria-label="Hồng" title="Hồng" aria-pressed="false"></button>
         <button type="button" data-stroke-color="#89949D" style="--ink:#89949D" aria-label="Bạc" title="Bạc" aria-pressed="false"></button>
-        <label class="custom-ink" title="Chọn màu tùy ý"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4-1L20 7l-3-3L5 16l-1 4Z"/></svg><span class="sr-only">Màu tùy chọn</span><input id="stroke-color" type="color" value="#E7BD00"></label>
+        <label class="custom-ink" title="Chọn màu tùy ý"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4-1L20 7l-3-3L5 16l-1 4Z"/></svg><span class="sr-only">Màu tùy chọn</span><input id="stroke-color" type="color" value="#096120"></label>
       </div>
       <div class="rgb-inputs" role="group" aria-label="Nhập màu RGB từ 0 đến 255">
-        <label>R<input id="rgb-r" data-rgb type="number" min="0" max="255" step="1" inputmode="numeric" value="231" aria-label="Đỏ (R), từ 0 đến 255"></label>
-        <label>G<input id="rgb-g" data-rgb type="number" min="0" max="255" step="1" inputmode="numeric" value="189" aria-label="Xanh lá (G), từ 0 đến 255"></label>
-        <label>B<input id="rgb-b" data-rgb type="number" min="0" max="255" step="1" inputmode="numeric" value="0" aria-label="Xanh dương (B), từ 0 đến 255"></label>
+        <label>R<input id="rgb-r" data-rgb type="number" min="0" max="255" step="1" inputmode="numeric" value="9" aria-label="Đỏ (R), từ 0 đến 255"></label>
+        <label>G<input id="rgb-g" data-rgb type="number" min="0" max="255" step="1" inputmode="numeric" value="97" aria-label="Xanh lá (G), từ 0 đến 255"></label>
+        <label>B<input id="rgb-b" data-rgb type="number" min="0" max="255" step="1" inputmode="numeric" value="32" aria-label="Xanh dương (B), từ 0 đến 255"></label>
       </div>
       <div class="brush-sample"><canvas id="brush-preview" width="280" height="48" aria-label="Mẫu nét Mono line mức 3"></canvas></div>
     </aside>

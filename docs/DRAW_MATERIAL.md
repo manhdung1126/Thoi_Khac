@@ -18,7 +18,7 @@ Các bản nháp/tác phẩm v1 và graphite v2 của lần thử trước vẫn
 
 ## Display và Control
 
-Nền gốc `frontend/display/assets/led-scroll.png` và 27 vị trí ô không đổi. Display không thêm tiêu đề, thẻ hình, bộ đếm hoặc nút thường trực lên ảnh bàn giao. Phần dư do viewport khác tỉ lệ 2:1 dùng xanh ngọc trầm; nền không bị kéo méo/cắt.
+Nền động `frontend/display/assets/led-scroll.mp4` phát lặp không tiếng, dùng chung cho Display, Control và Dấu Ấn. 27 ô nằm trong vùng giấy an toàn của video; xem [LED_INSTALLATION.md](LED_INSTALLATION.md) để biết tọa độ và khoảng cách. Display không thêm tiêu đề, thẻ hình, bộ đếm hoặc nút thường trực lên nền bàn giao. Phần dư do viewport khác tỉ lệ 2:1 dùng xanh ngọc trầm; nền không bị kéo méo/cắt.
 
 Nét vàng có bảng màu nền chung và lớp ánh kim chuyển động dùng chung cho Display, preview Control, khoảnh khắc và Dấu Ấn. Ánh sáng thay RGB bên trong mask, không thay alpha hoặc độ rộng; bỏ glow ngoài nét để nét sạch trên giấy sáng. SVG và Draw giữ bản ánh kim tĩnh; chênh lệch phản sáng theo thời điểm là có chủ ý. Graphite v2 đã lưu không bị tô lại; SVG v1 đã lưu không bị ghi đè.
 

@@ -4,7 +4,7 @@ Hướng dẫn dành cho ban tổ chức và đội kỹ thuật tại triển l
 
 ## Trải nghiệm của khách tham quan
 
-1. Mở đường dẫn Draw do ban tổ chức cung cấp.
+1. Mở đường dẫn Draw do ban tổ chức cung cấp. Nút ở góc trên bên phải mở toàn màn hình (hoặc phím **F** trên máy tính); bấm lại để thoát. Nếu trình duyệt không hỗ trợ, trang sẽ hiện hướng dẫn thay thế.
 2. Vẽ trên bảng bằng ngón tay, bút cảm ứng hoặc chuột.
 3. Mở nút **Bút** để chọn một trong năm độ rộng, màu có sẵn hoặc màu tùy chọn. Có thể dùng tẩy, hoàn tác và làm lại khi cần.
 4. Bấm **Khắc** để gửi tác phẩm lên không gian chung.

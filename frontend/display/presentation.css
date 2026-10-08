@@ -14,5 +14,12 @@ body > #stage { position: fixed; inset: 0; width: 100%; height: 100%; aspect-rat
 #display-controls { position: fixed; top: 16px; right: 16px; z-index: 20; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: #132326ee; color: #fff2bd; border-radius: 10px; max-width: calc(100% - 56px); }
 #connection-status { align-self: center; padding: 0 8px; }
 #display-error { position: fixed; left: 20px; bottom: 20px; z-index: 30; padding: 12px; background: #692f22; color: white; max-width: 70%; }
-@media (hover: none) { #presentation-hotspot { width: 82px; height: 82px; } #presentation-launcher { right: 14px; bottom: 14px; } #presentation-hotspot:active #presentation-launcher { opacity: 1; transform: none; pointer-events: auto; } #presentation-hint { display: none; } }
+@media (hover: none) {
+  #presentation-hotspot { width: 82px; height: 82px; }
+  #presentation-launcher { right: 14px; bottom: 14px; opacity: 1; transform: none; pointer-events: auto; }
+  :fullscreen #presentation-launcher { opacity: 0; pointer-events: none; }
+  :fullscreen #presentation-hotspot:active #presentation-launcher,
+  :fullscreen #presentation-hotspot:focus-within #presentation-launcher { opacity: 1; pointer-events: auto; }
+  #presentation-hint { display: none; }
+}
 @media (prefers-reduced-motion: reduce) { #presentation-launcher, #presentation-hint { transition: none; } }

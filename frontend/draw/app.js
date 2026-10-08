@@ -18,7 +18,7 @@ const activeBaseContext=activeBase.getContext('2d',{willReadFrequently:true});
 const apiBase=location.port==='4173'?`${location.protocol}//${location.hostname}:8000`:location.origin;
 const draftKey='cloud-strokes-draft-v2',preferencesKey='cloud-strokes-brush-v1';
 let strokes=[],undo=[],redo=[],active=null,busy=false,erasing=false,monoLevel=3;
-let width=monoDrawWidth(monoLevel),inkColor=LED.color,submissionId=uuid(),hasDrawing=false;
+let width=monoDrawWidth(monoLevel),inkColor='#096120',submissionId=uuid(),hasDrawing=false;
 let healthTimer,checking=false,statusTimer,networkDown=false;
 
 function uuid(){const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
@@ -33,6 +33,20 @@ function status(text,type='',timeout=type==='error'?0:2600){
   const node=$('#upload-status');clearTimeout(statusTimer);node.textContent=text;node.title='';node.className=`toast ${type}`;node.hidden=!text;
   if(text&&timeout)statusTimer=setTimeout(()=>{node.hidden=true;},timeout);
 }
+async function fullscreen(){
+  if(active)return;
+  try{
+    if(document.fullscreenElement)await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  }catch{status('Trình duyệt chưa hỗ trợ toàn màn hình. Hãy dùng chế độ toàn màn hình trong menu trình duyệt.','error');}
+}
+function fullscreenChange(){
+  const button=$('#draw-fullscreen'),enabled=Boolean(document.fullscreenElement);
+  const label=enabled?'Thoát toàn màn hình':'Toàn màn hình';
+  button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(enabled));button.title=`${label} (F)`;
+}
+$('#draw-fullscreen').addEventListener('click',fullscreen);
+document.addEventListener('fullscreenchange',fullscreenChange);
 function toolPanel(open){const panel=$('#tool-panel'),button=$('#pencil-button');panel.hidden=!open;button.setAttribute('aria-expanded',String(open));}
 function updateButtons(){
   $('#send-button').disabled=busy||Boolean(active)||!hasDrawing;
@@ -105,7 +119,10 @@ document.querySelectorAll('[data-rgb]').forEach(input=>input.addEventListener('i
   if(channels.every(value=>value!==null))chooseColor('#'+channels.map(value=>value.toString(16).padStart(2,'0')).join(''));
 }));
 $('#eraser-button').addEventListener('click',()=>{if(busy)return;erasing=true;toolPanel(false);$('#pencil-button').setAttribute('aria-pressed','false');$('#eraser-button').setAttribute('aria-pressed','true');$('#tool-label').textContent='Tẩy nét vẽ';updateButtons();});
-document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&!$('#tool-panel').hidden){toolPanel(false);$('#pencil-button').focus?.();}});
+document.addEventListener?.('keydown',event=>{
+  if(event.key==='Escape'&&!$('#tool-panel').hidden){toolPanel(false);$('#pencil-button').focus?.();}
+  if(event.key.toLowerCase()==='f'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)){event.preventDefault();void fullscreen();}
+});
 async function request(path,options={},timeout=15000){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
   try{const response=await fetch(apiBase+path,{...options,signal:controller.signal}),text=await response.text();let data;try{data=JSON.parse(text);}catch{data=null;}if(!response.ok)throw new Error(typeof data?.detail==='string'?data.detail:`Server chưa xử lý được (${response.status}). Hãy thử lại.`);if(!data)throw new Error('Phản hồi chưa hợp lệ. Hãy thử lại.');return data;}

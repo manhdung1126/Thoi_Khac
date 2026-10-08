@@ -64,6 +64,15 @@ class LEDTests(unittest.TestCase):
             self.assertEqual(cached.status_code,304)
             self.assertEqual(cached.headers.get('cache-control'),'no-cache')
         self.assertNotIn('cache-control',self.client.get('/display/assets/led-scroll.png').headers)
+    def test_video_background_supports_byte_ranges_and_local_poster(self):
+        response=self.client.get('/display/assets/led-scroll.mp4',headers={'Range':'bytes=0-1023'})
+        self.assertEqual(response.status_code,206)
+        self.assertEqual(response.headers['content-type'],'video/mp4')
+        self.assertTrue(response.headers['content-range'].startswith('bytes 0-1023/'))
+        self.assertEqual(len(response.content),1024)
+        poster=self.client.get('/display/assets/led-scroll-poster.jpg')
+        self.assertEqual(poster.status_code,200)
+        self.assertEqual(poster.headers['content-type'],'image/jpeg')
     def test_first_27_fill_empty_then_new_picture_replaces_random_cell_and_keeps_history(self):
         with patch('backend.app.led.secrets.choice',side_effect=lambda choices:choices[-1]):
             ids=[self.upload().json()['id'] for _ in range(27)]

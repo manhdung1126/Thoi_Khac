@@ -62,6 +62,59 @@ async function waitState(page,predicate,timeout=30000){
 }
 async function usable(page,locator){await locator.waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#send-button').disabled);}
 
+test('video scroll plays and loops in Display/Control, snapshots its frame, and releases hidden/destroyed decoders',async t=>{
+  const context=await browser.newContext({viewport:{width:1536,height:768}});t.after(()=>context.close());
+  const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+'/display/');
+  await page.waitForFunction(()=>{const v=document.querySelector('video.led-background');return v?.videoWidth===1536&&!v.paused&&v.currentTime>0;});
+  const video=page.locator('video.led-background');
+  assert.deepEqual(await video.evaluate(v=>[v.videoWidth,v.videoHeight,v.muted,v.loop,v.playsInline]),[1536,768,true,true,true]);
+  await video.evaluate(v=>{v.currentTime=v.duration-.15;});
+  await page.waitForFunction(()=>document.querySelector('video.led-background').currentTime<2);
+  await page.keyboard.press('f');await page.waitForFunction(()=>!!document.fullscreenElement);
+  const fullscreenTime=await video.evaluate(v=>v.currentTime);
+  await page.waitForFunction(time=>document.querySelector('video.led-background').currentTime>time+.1,fullscreenTime);
+  await page.keyboard.press('f');await page.waitForFunction(()=>!document.fullscreenElement);
+  assert.equal(await page.locator('.led-cell').count(),27);
+  assert.equal(await page.locator('video.ending-background').evaluate(v=>v.paused),true);
+  const frame=await page.evaluate(async()=>{
+    const {LEDScene}=await import('/display/led-scene.js');
+    const host=document.createElement('div');host.style.cssText='position:fixed;inset:0';document.body.append(host);
+    const scene=new LEDScene(host,{animateMetal:false}),v=host.querySelector('video');
+    await new Promise((resolve,reject)=>{v.addEventListener('loadeddata',resolve,{once:true});v.addEventListener('error',reject,{once:true});});
+    v.pause();
+    const canvas=document.createElement('canvas');canvas.width=1536;canvas.height=768;const ctx=canvas.getContext('2d');
+    ctx.drawImage(v,0,0);const pixel=[...ctx.getImageData(20,20,1,1).data];
+    const blob=await scene.capture({pages:[],drawings:[]});const bitmap=await createImageBitmap(blob);
+    ctx.drawImage(bitmap,0,0);const captured=[...ctx.getImageData(20,20,1,1).data];bitmap.close();
+    scene.destroy();host.remove();
+    return {pixel,captured,unloaded:v.paused&&!v.hasAttribute('src')};
+  });
+  assert.deepEqual(frame.captured,frame.pixel);assert.equal(frame.unloaded,true);
+  const control=await context.newPage();await control.goto(origin+'/control/');
+  await control.getByLabel('Mã quản lý',{exact:true}).fill('2468');
+  await control.getByRole('dialog').getByRole('button',{name:'Đăng nhập',exact:true}).click();
+  await control.waitForFunction(()=>{const v=document.querySelector('video.led-background');return v?.readyState>=2&&!v.paused&&v.currentTime>0;});
+  assert.deepEqual(await control.locator('.led-cell').first().evaluate(el=>[el.style.left,el.style.top]),await page.locator('.led-cell').first().evaluate(el=>[el.style.left,el.style.top]));
+  assert.deepEqual(errors,[]);
+},{timeout:45000});
+
+test('failed video falls back to its poster without blocking a LED snapshot',async t=>{
+  const context=await browser.newContext();t.after(()=>context.close());
+  const page=await context.newPage();await page.route('**/display/assets/led-scroll.mp4',route=>route.abort());
+  await page.goto(origin+'/display/');
+  await page.locator('img.led-background').waitFor();
+  await page.waitForFunction(()=>document.querySelector('img.led-background')?.naturalWidth===1536);
+  assert.equal(await page.locator('img.led-background').evaluate(img=>img.complete&&img.naturalWidth===1536),true);
+  const result=await page.evaluate(async()=>{
+    const {LEDScene}=await import('/display/led-scene.js');const host=document.createElement('div');document.body.append(host);
+    const scene=new LEDScene(host,{animateMetal:false});
+    const blob=await scene.capture({pages:[],drawings:[]}),bitmap=await createImageBitmap(blob);
+    const size=[bitmap.width,bitmap.height];bitmap.close();scene.destroy();host.remove();return size;
+  });
+  assert.deepEqual(result,[1536,768]);
+},{timeout:20000});
+
 async function contractControl(t){
   const context=await browser.newContext({viewport:{width:1440,height:1000}});t.after(()=>context.close());
   const page=await context.newPage(),errors=[],messages=[],waiting=[];
@@ -514,6 +567,7 @@ test('Control uploads an Ending mask → prepare → real Display ready → star
   const started=control.waitForResponse(r=>r.url()===origin+'/api/ending/'+frozen.id+'/start'&&r.ok());
   await start.click();const running=(await (await started).json()).ending;assert.ok(running.start_time>0);assert.equal(running.phase,'CONVERGE');
   const collective=display.getByLabel('Dấu Ấn tập thể',{exact:true});await collective.waitFor({state:'visible'});
+  await display.waitForFunction(()=>{const v=document.querySelector('video.ending-background');return v?.readyState>=2&&!v.paused&&v.currentTime>0;});
   await display.waitForFunction(()=>{
     const canvas=document.querySelector('canvas[aria-label="Dấu Ấn tập thể"]');
     return canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((v,i)=>i%4===3&&v>0);
@@ -521,6 +575,7 @@ test('Control uploads an Ending mask → prepare → real Display ready → star
   const reset=control.waitForResponse(r=>r.url()===origin+'/api/ending/'+frozen.id+'/reset'&&r.ok());
   await control.getByRole('button',{name:'Về trình chiếu',exact:true}).click();await reset;
   await collective.waitFor({state:'hidden'});const normal=await state(control);
+  await display.waitForFunction(()=>document.querySelector('video.ending-background').paused);
   assert.equal(normal.ending,undefined);assert.equal(normal.current_page_id,original);
   const page=normal.pages.find(p=>p.id===original);
   // Reset resumes carousel clocks, so compare the visible layout/queues, not timestamps.
@@ -979,6 +1034,61 @@ test('Draw palette keeps per-stroke color through draft, SVG, Control, realtime 
   assert.equal(ending.material,'metallic-color');colored(ending.before);colored(ending.after);
   for(let i=3;i<ending.before.length;i+=4)assert.equal(ending.after[i],ending.before[i]);
   assert.ok(ending.after.some((v,i)=>i%4!==3&&v!==ending.before[i]));assert.deepEqual(errors,[]);
+});
+
+test('Draw invitation fonts, green ink and fullscreen preserve the artwork; Display exposes touch fullscreen', {timeout:45000},async t=>{
+  const context=await browser.newContext({viewport:{width:1440,height:900}});t.after(()=>context.close());
+  const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+'/draw/');await page.evaluate(()=>document.fonts.ready);
+  assert.equal(await page.locator('.draw-invitation').textContent(),'Sau chặng hành trình lịch sử, hãy gửi một lời nhắn nhủ tới thế\u00a0hệ ngày nay cũng như bản thân mình trong tương lai nhé');
+  const fonts=await page.evaluate(()=>({
+    cta:getComputedStyle(document.querySelector('.draw-invitation')).fontFamily,
+    action:getComputedStyle(document.querySelector('#send-button')).fontFamily,
+    loaded:[...document.fonts].filter(face=>face.status==='loaded').map(face=>face.family),
+  }));
+  assert.match(fonts.cta,/DFVN STAMPA V2/);assert.match(fonts.action,/DFVN Aostora/);
+  assert.ok(fonts.loaded.includes('DFVN STAMPA V2')&&fonts.loaded.includes('DFVN Aostora'));
+  assert.equal(await page.evaluate(async()=>{await document.fonts.load('20px "DFVN STAMPA V1"','thế hệ ngày nay');return document.fonts.check('20px "DFVN STAMPA V1"');}),true);
+  await page.getByRole('button',{name:'Bút',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Xanh lá đậm',exact:true}).getAttribute('aria-pressed'),'true');
+  assert.equal((await page.locator('#stroke-color').inputValue()).toUpperCase(),'#096120');
+  await page.getByRole('button',{name:'Đóng tùy chỉnh bút',exact:true}).click();
+  const box=await page.locator('#drawing-canvas').boundingBox();
+  await page.mouse.move(box.x+box.width*.2,box.y+box.height*.3);await page.mouse.down();
+  await page.mouse.move(box.x+box.width*.6,box.y+box.height*.5);await page.mouse.up();
+  await page.waitForFunction(()=>!document.querySelector('#send-button').disabled);
+  const pixels=await canvasPixels(page);
+  await page.getByRole('button',{name:'Toàn màn hình',exact:true}).click();await page.waitForFunction(()=>Boolean(document.fullscreenElement));
+  assert.equal(await page.getByRole('button',{name:'Thoát toàn màn hình',exact:true}).getAttribute('aria-pressed'),'true');
+  assert.deepEqual(await canvasPixels(page),pixels);
+  await page.keyboard.press('f');await page.waitForFunction(()=>!document.fullscreenElement);assert.deepEqual(await canvasPixels(page),pixels);
+  await page.getByRole('button',{name:'Bút',exact:true}).click();await page.locator('#rgb-r').focus();await page.keyboard.press('f');
+  assert.equal(await page.evaluate(()=>Boolean(document.fullscreenElement)),false);
+  await page.getByRole('button',{name:'Đóng tùy chỉnh bút',exact:true}).click();
+  const submitted=page.waitForResponse(response=>response.url()===origin+'/api/drawings'&&response.request().method()==='POST');
+  await page.getByRole('button',{name:'Khắc tác phẩm',exact:true}).click();const artwork=await (await submitted).json();
+  const vectors=await (await page.request.get(origin+artwork.vector_path)).json();assert.equal(vectors.strokes[0].color,'#096120');
+  const svg=await (await page.request.get(origin+artwork.image_path)).text();assert.match(svg,/url\(#ink096120\)/);assert.match(svg,/data-colored="true"/);
+  for(const [width,height]of [[320,568],[390,844],[820,1180],[844,390]]){
+    await page.setViewportSize({width,height});await page.reload();await page.evaluate(()=>document.fonts.ready);
+    const invitation=await page.locator('.draw-invitation').boundingBox(),canvas=await page.locator('#drawing-canvas').boundingBox();
+    assert.equal(await page.locator('.draw-invitation').evaluate(node=>{
+      const text=node.firstChild,start=text.textContent.indexOf('thế\u00a0hệ'),range=document.createRange();
+      range.setStart(text,start);range.setEnd(text,start+6);return range.getClientRects().length;
+    }),1,`“thế hệ” stays on one line ${width}`);
+    assert.ok(invitation.y>=0&&invitation.y+invitation.height<=canvas.y,`CTA above canvas ${width}`);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight),`no overflow ${width}`);
+  }
+  await page.evaluate(()=>{document.documentElement.requestFullscreen=()=>Promise.reject(Error('unsupported'));});
+  await page.getByRole('button',{name:'Toàn màn hình',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'Trình duyệt chưa hỗ trợ toàn màn hình'}).waitFor();
+  const touchContext=await browser.newContext({viewport:{width:820,height:1180},hasTouch:true,isMobile:true});t.after(()=>touchContext.close());
+  const display=await touchContext.newPage();display.on('pageerror',error=>errors.push(error.message));await display.goto(origin+'/display/');
+  const launcher=display.getByRole('button',{name:'Mở toàn màn hình',exact:true});
+  assert.equal(await launcher.evaluate(button=>getComputedStyle(button.parentElement).opacity),'1');
+  await launcher.tap();await display.waitForFunction(()=>Boolean(document.fullscreenElement));
+  assert.equal(await display.getByRole('button',{name:'Thoát toàn màn hình',exact:true}).getAttribute('title'),'Thoát toàn màn hình (F)');
+  assert.deepEqual(errors,[]);
 });
 
 test('visitor layouts keep touch controls reachable, keyboard focus visible and canvas stable through send states', {timeout:45000},async t=>{

@@ -1,3 +1,24 @@
+@font-face {
+  font-family: "DFVN Aostora";
+  src: url("/shared/assets/fonts/DFVN-Aostora.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DFVN STAMPA V1";
+  src: url("/shared/assets/fonts/DFVN-STAMPA-V1.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DFVN STAMPA V2";
+  src: url("/shared/assets/fonts/DFVN-STAMPA-V2.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
 :root {
   font-family: var(--ex-font);
   color-scheme: light;
@@ -7,6 +28,7 @@
   --ochre: var(--ex-gold);
   --teal: var(--ex-teal);
   --line: var(--ex-control-line);
+  --draw-cta-font: "DFVN STAMPA V2";
   color: var(--graphite);
   background: var(--paper);
 }
@@ -31,10 +53,23 @@ button:disabled { cursor: not-allowed; opacity: .35; }
   position: relative;
   isolation: isolate;
 }
+.draw-invitation {
+  width: min(720px, 100%);
+  margin: 24px 0 20px;
+  color: #096120;
+  font-family: var(--draw-cta-font), var(--ex-font);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: pretty;
+  font-synthesis: none;
+}
+.fullscreen-control { position: fixed; top: max(8px,env(safe-area-inset-top)); right: max(8px,env(safe-area-inset-right)); z-index: 10; min-height: 44px; min-width: 44px; background: var(--ex-surface); border-color: var(--line); }
 .drawing-stage {
   position: relative;
-  width: min(720px, 100%, calc(100svh - 156px));
-  width: min(720px, 100%, calc(100dvh - 156px));
+  width: min(720px, 100%, calc(100svh - 284px));
+  width: min(720px, 100%, calc(100dvh - 284px));
   display: grid;
   grid-template-columns: minmax(0,1fr);
   gap: 12px;
@@ -79,7 +114,9 @@ button:disabled { cursor: not-allowed; opacity: .35; }
   color: var(--ex-surface);
   background: var(--teal);
   font-size: 18px;
-  font-weight: 600;
+  font-family: "DFVN Aostora", var(--ex-font);
+  font-weight: 400;
+  font-synthesis: none;
   letter-spacing: .03em;
 }
 .carve-action:not(:disabled):active { background: #254f58; }
@@ -88,7 +125,8 @@ button:disabled { cursor: not-allowed; opacity: .35; }
   position: absolute;
   left: min(0px,calc((100% - 288px)/2));
   bottom: 80px;
-  width: min(320px, 100%);
+  width: min(320px, max(288px, 100%));
+  max-width: calc(100vw - 32px);
   max-height: calc(100svh - 180px);
   max-height: calc(100dvh - 180px);
   overflow-y: auto;
@@ -113,7 +151,7 @@ button:disabled { cursor: not-allowed; opacity: .35; }
 .ink-palette button:hover:not(:disabled) { border-color: var(--line); }
 .ink-palette button[aria-pressed="true"] { border-color: var(--teal); }
 .ink-palette button[aria-pressed="true"]::after { content: ""; position: absolute; left: calc(50% - 4px); top: 15px; width: 7px; height: 11px; border: solid var(--paper); border-width: 0 2px 2px 0; transform: rotate(45deg); filter: drop-shadow(0 1px 1px #514739); }
-.custom-ink { grid-column: span 2; display: flex; align-items: center; gap: 8px; padding-inline: 6px; }
+.custom-ink { display: flex; align-items: center; gap: 8px; padding-inline: 6px; }
 .custom-ink svg { width: 20px; height: 20px; fill: none; stroke: var(--teal); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .custom-ink input { width: 100%; min-width: 44px; height: 44px; padding: 4px; border: 1px solid var(--line); background: transparent; cursor: pointer; }
 .custom-ink input:disabled { opacity: .35; cursor: not-allowed; }
@@ -134,11 +172,13 @@ body.is-submitting .carve-action { font-size: 14px; color: var(--graphite); back
 body.is-submitting #drawing-canvas { pointer-events: none; cursor: wait; }
 @media (max-width: 600px) and (orientation: portrait) {
   .draw-app { padding: max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
+  .draw-invitation { font-size: 18px; }
 }
 @media (max-height: 550px) and (orientation: landscape) {
   .draw-app { padding-block: max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-bottom)); }
   .tool-panel { width: min(320px, calc(100vw - 32px)); }
-  .drawing-stage { width: min(100%, calc(100svh - 156px)); width: min(100%, calc(100dvh - 156px)); gap: 8px; }
+  .draw-invitation { max-width: calc(100% - 64px); margin: 0 0 12px; font-size: 16px; }
+  .drawing-stage { width: min(100%, calc(100svh - 220px)); width: min(100%, calc(100dvh - 220px)); gap: 8px; }
   .tool-panel { bottom: 72px; max-height: calc(100dvh - 124px); }
 }
 @media (max-width: 400px), (max-height: 550px) and (orientation: landscape) {

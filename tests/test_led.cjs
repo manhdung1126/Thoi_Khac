@@ -10,15 +10,17 @@ test('custom metallic inks share identical Canvas/SVG stops and keep the origina
     assert.deepEqual(stops,metallicStops(color));assert.equal(stops[3][1],color);
   }
 });
-test('27 LED cells fit the new scroll paper and avoid the title, rolls and lower-left cloud',async()=>{
+test('27 LED cells fit the video scroll and avoid the title, rolls and moving corner clouds',async()=>{
   const {LED,cellGeometry,SCROLL_ROWS,SCROLL_AREA}=await import('../frontend/shared/led.js');
   assert.equal(LED.width/LED.height,2);assert.equal(LED.gap,47*1536/4600);assert.equal(LED.size,110);assert.equal(LED.padding,0);
-  assert.deepEqual(SCROLL_ROWS,[9,10,8]);assert.equal(LED.background,'/display/assets/led-scroll.png');
+  assert.deepEqual(SCROLL_ROWS,[9,10,8]);assert.equal(LED.background,'/display/assets/led-scroll.mp4');
+  assert.equal(LED.poster,'/display/assets/led-scroll-poster.jpg');
   const boxes=Array.from({length:27},(_,i)=>cellGeometry(i));
   assert.equal(new Set(boxes.map(b=>`${b.x},${b.y}`)).size,27);
   for(const b of boxes){assert.ok(b.x>=SCROLL_AREA.x&&b.y>=SCROLL_AREA.y&&b.x+b.width<=SCROLL_AREA.x+SCROLL_AREA.width&&b.y+b.height<SCROLL_AREA.y+SCROLL_AREA.height);}
   for(const start of [0,9,19])for(let i=start+1;i<start+SCROLL_ROWS[[0,9,19].indexOf(start)];i++)assert.ok(Math.abs(boxes[i].x-boxes[i-1].x-LED.size-LED.gap)<1e-9);
   assert.ok(boxes.slice(19).every(b=>b.x>395));
+  assert.ok(boxes.every(b=>b.y>=250&&b.y+b.height<=600));
   for(let i=0;i<boxes.length;i++)for(let j=0;j<i;j++){const a=boxes[i],b=boxes[j];assert.ok(a.x+a.width<=b.x||b.x+b.width<=a.x||a.y+a.height<=b.y||b.y+b.height<=a.y);}
   assert.throws(()=>cellGeometry(27),RangeError);
 });

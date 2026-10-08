@@ -120,14 +120,22 @@ for (const replayed of [false, true]) test(`confirmed submission clears canvas a
 test('Draw scales a 2px line from a 110px scroll cell into its 720px canvas',async()=>{
   const page=drawingPage([{status:500,body:{detail:'Retry'}},{body:{id:'led',image_path:'/api/drawings/led'}}],undefined,'led');
   page.draw();const stroke=page.draft().strokes[0];
-  assert.equal(stroke.led,true);assert.equal(stroke.color,'#E7BD00');assert.equal(stroke.material,'mono-v1');
+  assert.equal(stroke.led,true);assert.equal(stroke.color,'#096120');assert.equal(stroke.material,'mono-v1');
   assert.equal(stroke.width,2*720/110);
   await page.send();await page.send();
   assert.equal(page.uploads[0],page.uploads[1]);assert.equal(page.vectors[0],page.vectors[1]);
   assert.equal(JSON.parse(page.vectors[0]).profile,'led-2px');
   assert.equal(JSON.parse(page.vectors[0]).version,2);
-  assert.deepEqual(JSON.parse(page.vectors[0]).strokes[0],{erase:false,width:2,material:'mono-v1',points:[[20,20,.55]]});
+  assert.deepEqual(JSON.parse(page.vectors[0]).strokes[0],{erase:false,width:2,material:'mono-v1',color:'#096120',points:[[20,20,.55]]});
   assert.equal(page.ink(),false);
+});
+
+test('new visitors get dark green ink without replacing a returning visitor’s chosen color',()=>{
+  const fresh=drawingPage([]);assert.equal(fresh.element('#stroke-color').value,'#096120');
+  const saved=new Map([['cloud-strokes-brush-v1',JSON.stringify({monoLevel:4,inkColor:'#E7BD00'})]]);
+  const returning=drawingPage([],saved);returning.draw();
+  assert.equal(returning.draft().strokes[0].color,'#E7BD00');
+  assert.equal(returning.draft().strokes[0].ledWidth,2.5);
 });
 
 test('five Mono levels persist and belong to each new stroke',()=>{
@@ -168,7 +176,7 @@ test('returning to Mono preserves an existing graphite draft and its export meta
   await page.send();const data=JSON.parse(page.vectors[0]);
   assert.equal(data.version,2);assert.equal(data.strokes[0].material,'graphite-v1');
   assert.deepEqual(data.strokes[0].points,[[50,50,.4]]);
-  assert.deepEqual(data.strokes[1],{erase:false,width:2,material:'mono-v1',points:[[20,20,.55]]});
+  assert.deepEqual(data.strokes[1],{erase:false,width:2,material:'mono-v1',color:'#096120',points:[[20,20,.55]]});
 });
 
 test('solid legacy draft adopts the shared SVG palette without reducing its opacity',async()=>{

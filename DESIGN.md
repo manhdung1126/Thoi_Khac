@@ -137,7 +137,7 @@ The frontmatter records shipping UI values; the CSS in `frontend/shared/exhibiti
 
 ## Typography
 
-One local system stack serves the UI, beginning with Avenir Next where available. It needs no web-font service; glyph shapes may vary by operating system. Large visitor type and smaller operational type express different densities in the same family.
+The operational UI uses a local system stack, beginning with Avenir Next where available. Draw alone uses the supplied, self-hosted DFVN Aostora for “Khắc” and DFVN STAMPA V2 for the visitor invitation, with system fallbacks and swap loading. V2 uses conventional Vietnamese diacritics; V1 uses stylized detached marks and is retained only as an alternate through `--draw-cta-font`, not loaded unless used. No external font service is required.
 
 - **Display:** welcome title; portrait uses `clamp(44px,9vw,76px)` and short landscape uses (42px).
 - **Headline:** Control page title; phone uses (27px).
@@ -149,7 +149,7 @@ One local system stack serves the UI, beginning with Avenir Next where available
 
 Shared spacing values record recurring distances, not a new universal grid. Welcome caps its two-column composition at (1200px), with its supplied illustration beside the invitation; portrait up to (900px) stacks and centers the composition. Phone and short-landscape rules reduce padding and type without adding navigation.
 
-Draw centers a square paper within (720px), without a visible header or navigation. Paper width respects dynamic viewport height: `min(720px, 100%, calc(100dvh - 156px))`, with an `svh` fallback. Short landscape uses the same (156px) reserve. The tool row sits below the paper and may exceed its width while respecting viewport width. Insets account for safe areas; status feedback uses the existing toast.
+Draw centers a square paper within (720px), without a visible header or navigation. The visitor invitation sits above the paper, with a separate fullscreen icon in the upper-right viewport corner. Paper width respects dynamic viewport height: `min(720px, 100%, calc(100dvh - 284px))`, with an `svh` fallback; short landscape reserves (220px). The tool row sits below the paper and may exceed its width while respecting viewport width. Insets account for safe areas; status feedback uses the existing toast. New visitor ink defaults to dark green `#096120`, sampled from the supplied scroll title; saved preferences and older artwork keep their original colors and metallic material.
 
 Control caps at (1720px): a flexible operational column and a sticky (380px) library, shifting to (420px) above (1500px) and (330px) below (1100px). At (820px) it becomes a single flow with a static library. On wide but short screens, the library also becomes static. Preserve this operational hierarchy rather than copying Welcome's composition.
 
